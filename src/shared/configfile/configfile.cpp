@@ -371,7 +371,7 @@ NewLine:
             {
                 line++;
             }
-            else
+            else if (nextc != WEOF)
             {
                 ungetwc(nextc, file);
             }
