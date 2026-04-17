@@ -141,5 +141,5 @@ if ($UnitTestsPath) {
 
 
 if ($PostInstallCommand) {
-    Run { wsl.exe "$PostInstallCommand" }
+    Run { wsl.exe --exec bash -c "$PostInstallCommand" }
 }
