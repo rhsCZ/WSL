@@ -1849,7 +1849,9 @@ class NetworkTests
         }
         else
         {
-            // TODO: this accept call needs to timeout to avoid indefinite wait
+            int Timeout = 10000;
+            VERIFY_ARE_NOT_EQUAL(
+                setsockopt(listenSocket.get(), SOL_SOCKET, SO_RCVTIMEO, (char*)&Timeout, sizeof(Timeout)), SOCKET_ERROR);
             const wil::unique_socket acceptSocket(accept(listenSocket.get(), reinterpret_cast<SOCKADDR*>(&remoteAddr), &remoteAddrLen));
             VERIFY_ARE_NOT_EQUAL(acceptSocket.get(), INVALID_SOCKET);
         }
