@@ -35,8 +35,8 @@ std::optional<wsl::windows::service::PluginManager> g_pluginManager;
 extern unique_event g_networkingReady;
 extern bool g_lxcoreInitialized;
 
-_Requires_lock_held_(g_sessionLock)
-void ClearSessionsAndBlockNewInstancesLockHeld(std::optional<std::vector<std::shared_ptr<LxssUserSessionImpl>>>& sessions)
+_Requires_lock_not_held_(g_sessionLock)
+void ClearSessionsAndBlockNewInstancesImpl(std::optional<std::vector<std::shared_ptr<LxssUserSessionImpl>>>& sessions)
 {
     std::lock_guard lock(g_sessionTerminationLock);
 
@@ -71,7 +71,7 @@ void ClearSessionsAndBlockNewInstances()
         g_sessions.reset();
     }
 
-    ClearSessionsAndBlockNewInstancesLockHeld(sessions);
+    ClearSessionsAndBlockNewInstancesImpl(sessions);
 }
 
 void SetSessionPolicy(_In_ bool enabled)
