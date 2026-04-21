@@ -886,6 +886,10 @@ Retour à la mise en réseau NAT.</value>
     <value>Windows version {}. {} ne dispose pas des fonctionnalités requises</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
+  <data name="MessageMirroredNetworkingNotSupportedIpv6Disabled" xml:space="preserve">
+    <value>IPv6 is disabled on the host in an unsupported way (HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters DisabledComponents=0xff)</value>
+    <comment>{Locked="HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"}{Locked="DisabledComponents"}{Locked="0xff"}</comment>
+  </data>
   <data name="MessageHyperVFirewallNotSupported" xml:space="preserve">
     <value>Le pare-feu Hyper-V n’est pas pris en charge</value>
   </data>

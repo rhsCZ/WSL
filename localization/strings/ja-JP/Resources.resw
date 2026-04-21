@@ -885,6 +885,10 @@ NAT ネットワークにフォールバックしています。</value>
     <value>Windows バージョン {}.{} には必要な機能がありません</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
+  <data name="MessageMirroredNetworkingNotSupportedIpv6Disabled" xml:space="preserve">
+    <value>IPv6 is disabled on the host in an unsupported way (HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters DisabledComponents=0xff)</value>
+    <comment>{Locked="HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"}{Locked="DisabledComponents"}{Locked="0xff"}</comment>
+  </data>
   <data name="MessageHyperVFirewallNotSupported" xml:space="preserve">
     <value>Hyper-V ファイアウォールはサポートされていません</value>
   </data>
