@@ -226,6 +226,11 @@ void SetContainerOptionsFromArgs(CLIExecutionContext& context)
 {
     ContainerOptions options;
 
+    if (context.Args.Contains(ArgType::CIDFile))
+    {
+        options.CidFile = context.Args.Get<ArgType::CIDFile>();
+    }
+
     if (context.Args.Contains(ArgType::Name))
     {
         options.Name = WideToMultiByte(context.Args.Get<ArgType::Name>());
@@ -279,6 +284,16 @@ void SetContainerOptionsFromArgs(CLIExecutionContext& context)
     if (context.Args.Contains(ArgType::Remove))
     {
         options.Remove = true;
+    }
+
+    if (context.Args.Contains(ArgType::StopSignal))
+    {
+        options.StopSignal = validation::GetWSLCSignalFromString(context.Args.Get<ArgType::StopSignal>());
+    }
+
+    if (context.Args.Contains(ArgType::ShmSize))
+    {
+        options.ShmSize = validation::GetMemorySizeFromString(context.Args.Get<ArgType::ShmSize>());
     }
 
     if (context.Args.Contains(ArgType::Command))
