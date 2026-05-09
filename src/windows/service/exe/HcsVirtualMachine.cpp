@@ -14,6 +14,8 @@ Abstract:
 
 #include "HcsVirtualMachine.h"
 #include <format>
+#include <string>
+#include <string_view>
 #include "hcs_schema.h"
 #include "VirtioNetworking.h"
 #include "NatNetworking.h"
