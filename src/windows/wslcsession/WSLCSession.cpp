@@ -275,7 +275,6 @@ try
 
         // Recover any existing containers from storage.
         RecoverExistingNetworks();
-        RecoverExistingVolumes();
         RecoverExistingContainers();
     }
 
@@ -2490,6 +2489,7 @@ try
     mapping.AssignVmPort(it->second.first);
 
     m_virtualMachine->MapPort(mapping);
+   
 
     // Increase usage count.
     it->second.second++;

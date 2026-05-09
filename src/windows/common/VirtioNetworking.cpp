@@ -172,6 +172,7 @@ uint16_t VirtioNetworking::ModifyOpenPorts(
     }
 
     THROW_IF_FAILED_MSG(addShareResult, "Failed to set virtionet port mapping: %ls", portString.c_str());
+
     return HostPort;
 }
 
