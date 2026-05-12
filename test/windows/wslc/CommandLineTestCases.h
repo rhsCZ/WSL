@@ -25,22 +25,23 @@ COMMAND_LINE_TEST_CASE(L"-?", L"root", true)
 COMMAND_LINE_TEST_CASE(L"--version", L"root", true)
 COMMAND_LINE_TEST_CASE(L"-v", L"root", true)
 
-// Session command tests
-COMMAND_LINE_TEST_CASE(L"session list", L"list", true)
-COMMAND_LINE_TEST_CASE(L"session list --verbose", L"list", true)
-COMMAND_LINE_TEST_CASE(L"session list --verbose --help", L"list", true)
-COMMAND_LINE_TEST_CASE(L"session list --notanarg", L"list", false)
-COMMAND_LINE_TEST_CASE(L"session list extraarg", L"list", false)
-COMMAND_LINE_TEST_CASE(L"session shell session1", L"shell", true)
-COMMAND_LINE_TEST_CASE(L"session shell", L"shell", true)
-COMMAND_LINE_TEST_CASE(L"session terminate session1", L"terminate", true)
-COMMAND_LINE_TEST_CASE(L"session terminate", L"terminate", true)
-COMMAND_LINE_TEST_CASE(L"session enter C:\\storage", L"enter", true)
-COMMAND_LINE_TEST_CASE(L"session enter C:\\storage --name my-session", L"enter", true)
-COMMAND_LINE_TEST_CASE(L"session enter --name my-session C:\\storage", L"enter", true)
-COMMAND_LINE_TEST_CASE(L"session enter", L"enter", false)                        // Missing required storage-path
-COMMAND_LINE_TEST_CASE(L"session enter C:\\storage --notanarg", L"enter", false) // Invalid argument
-COMMAND_LINE_TEST_CASE(L"session enter --name my-session", L"enter", false)      // Missing required positional before flag
+// System command tests
+COMMAND_LINE_TEST_CASE(L"system -?", L"system", true)
+COMMAND_LINE_TEST_CASE(L"system session list", L"list", true)
+COMMAND_LINE_TEST_CASE(L"system session list --verbose", L"list", true)
+COMMAND_LINE_TEST_CASE(L"system session list --verbose --help", L"list", true)
+COMMAND_LINE_TEST_CASE(L"system session list --notanarg", L"list", false)
+COMMAND_LINE_TEST_CASE(L"system session list extraarg", L"list", false)
+COMMAND_LINE_TEST_CASE(L"system session shell session1", L"shell", true)
+COMMAND_LINE_TEST_CASE(L"system session shell", L"shell", true)
+COMMAND_LINE_TEST_CASE(L"system session terminate session1", L"terminate", true)
+COMMAND_LINE_TEST_CASE(L"system session terminate", L"terminate", true)
+COMMAND_LINE_TEST_CASE(L"system session enter C:\\storage", L"enter", true)
+COMMAND_LINE_TEST_CASE(L"system session enter C:\\storage --name my-session", L"enter", true)
+COMMAND_LINE_TEST_CASE(L"system session enter --name my-session C:\\storage", L"enter", true)
+COMMAND_LINE_TEST_CASE(L"system session enter", L"enter", false)                        // Missing required storage-path
+COMMAND_LINE_TEST_CASE(L"system session enter C:\\storage --notanarg", L"enter", false) // Invalid argument
+COMMAND_LINE_TEST_CASE(L"system session enter --name my-session", L"enter", false)      // Missing required positional before flag
 
 // Container command tests
 COMMAND_LINE_TEST_CASE(L"container list", L"list", true)
@@ -71,6 +72,7 @@ COMMAND_LINE_TEST_CASE(
     true)
 COMMAND_LINE_TEST_CASE(L"container run ubuntu bash -c 'echo Hello World'", L"run", true)
 COMMAND_LINE_TEST_CASE(L"container run ubuntu", L"run", true)
+COMMAND_LINE_TEST_CASE(L"container run --cidfile C:\\temp\\cidfile ubuntu", L"run", true)
 COMMAND_LINE_TEST_CASE(L"container run -it --name foo ubuntu", L"run", true)
 COMMAND_LINE_TEST_CASE(L"container run --rm -it --name foo ubuntu", L"run", true)
 COMMAND_LINE_TEST_CASE(L"stop", L"stop", true)
@@ -84,6 +86,7 @@ COMMAND_LINE_TEST_CASE(L"container start --attach cont", L"start", true)
 COMMAND_LINE_TEST_CASE(L"container start -a cont", L"start", true)
 COMMAND_LINE_TEST_CASE(L"create ubuntu:latest", L"create", true)
 COMMAND_LINE_TEST_CASE(L"container create --name foo ubuntu", L"create", true)
+COMMAND_LINE_TEST_CASE(L"container create --cidfile C:\\temp\\cidfile --name foo ubuntu", L"create", true)
 COMMAND_LINE_TEST_CASE(L"create --workdir /app ubuntu", L"create", true)
 COMMAND_LINE_TEST_CASE(L"create -w /app ubuntu", L"create", true)
 COMMAND_LINE_TEST_CASE(L"container create --workdir /app ubuntu sh", L"create", true)
@@ -116,6 +119,16 @@ COMMAND_LINE_TEST_CASE(L"run --dns 1.1.1.1 --dns-search example.com --dns-option
 COMMAND_LINE_TEST_CASE(L"run --dns", L"run", false)        // Missing value for --dns
 COMMAND_LINE_TEST_CASE(L"run --dns-search", L"run", false) // Missing value for --dns-search
 COMMAND_LINE_TEST_CASE(L"run --dns-option", L"run", false) // Missing value for --dns-option
+// GPU tests for container run
+COMMAND_LINE_TEST_CASE(L"run --gpus all ubuntu", L"run", true)
+COMMAND_LINE_TEST_CASE(L"container run --gpus all ubuntu sh", L"run", true)
+COMMAND_LINE_TEST_CASE(L"run --gpus invalid ubuntu", L"run", false) // Only 'all' is supported
+COMMAND_LINE_TEST_CASE(L"run --gpus", L"run", false)                // Missing value for --gpus
+// GPU tests for container create
+COMMAND_LINE_TEST_CASE(L"create --gpus all ubuntu", L"create", true)
+COMMAND_LINE_TEST_CASE(L"container create --gpus all ubuntu sh", L"create", true)
+COMMAND_LINE_TEST_CASE(L"create --gpus none ubuntu", L"create", false) // Only 'all' is supported
+COMMAND_LINE_TEST_CASE(L"create --gpus", L"create", false)             // Missing value for --gpus
 COMMAND_LINE_TEST_CASE(L"exec cont1 echo Hello", L"exec", true)
 COMMAND_LINE_TEST_CASE(L"exec cont1", L"exec", false)                                         // Missing required command argument
 COMMAND_LINE_TEST_CASE(L"container exec -it cont1 sh -c \"echo a && echo b\"", L"exec", true) // docker exec example
@@ -141,6 +154,18 @@ COMMAND_LINE_TEST_CASE(L"container logs cont1", L"logs", true)
 COMMAND_LINE_TEST_CASE(L"container logs --follow cont1", L"logs", true)
 COMMAND_LINE_TEST_CASE(L"container logs cont1 -f", L"logs", true)
 COMMAND_LINE_TEST_CASE(L"container logs", L"logs", false)
+COMMAND_LINE_TEST_CASE(L"container logs --tail 10 cont1", L"logs", true)
+COMMAND_LINE_TEST_CASE(L"container logs -n 10 cont1", L"logs", true)
+COMMAND_LINE_TEST_CASE(L"container logs cont1 --tail 10", L"logs", true)
+COMMAND_LINE_TEST_CASE(L"container logs --tail=10 cont1", L"logs", true)
+COMMAND_LINE_TEST_CASE(L"container logs -n=10 cont1", L"logs", true)
+COMMAND_LINE_TEST_CASE(L"container logs --follow --tail 5 cont1", L"logs", true)
+COMMAND_LINE_TEST_CASE(L"container logs --tail 0 cont1", L"logs", false)
+COMMAND_LINE_TEST_CASE(L"container logs --tail abc cont1", L"logs", false)
+COMMAND_LINE_TEST_CASE(L"container logs -n abc cont1", L"logs", false)
+COMMAND_LINE_TEST_CASE(L"container logs -n=abc cont1", L"logs", false)
+COMMAND_LINE_TEST_CASE(L"container logs --tail", L"logs", false)
+COMMAND_LINE_TEST_CASE(L"container logs -n", L"logs", false)
 
 // Image command
 COMMAND_LINE_TEST_CASE(L"image build C:\\context", L"build", true)

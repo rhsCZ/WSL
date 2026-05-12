@@ -20,6 +20,7 @@ Abstract:
 #include <wslutil.h>
 #include <WSLCProcessLauncher.h>
 #include <CommandLine.h>
+#include <filesystem>
 #include <unordered_map>
 #include <wslc.h>
 
@@ -46,6 +47,7 @@ static wsl::windows::common::RunningWSLCContainer CreateInternal(Session& sessio
     auto containerFlags = WSLCContainerFlagsNone;
     WI_SetFlagIf(containerFlags, WSLCContainerFlagsRm, options.Remove);
     WI_SetFlagIf(containerFlags, WSLCContainerFlagsPublishAll, options.PublishAll);
+    WI_SetFlagIf(containerFlags, WSLCContainerFlagsGpu, options.Gpu);
 
     wsl::windows::common::WSLCContainerLauncher containerLauncher(
         image, options.Name, options.Arguments, options.EnvironmentVariables, WSLCContainerNetworkTypeBridged, processFlags);
@@ -94,6 +96,16 @@ static wsl::windows::common::RunningWSLCContainer CreateInternal(Session& sessio
     }
 
     containerLauncher.SetContainerFlags(containerFlags);
+
+    if (options.StopSignal != WSLCSignalNone)
+    {
+        containerLauncher.SetDefaultStopSignal(options.StopSignal);
+    }
+
+    if (options.ShmSize.has_value())
+    {
+        containerLauncher.SetShmSize(options.ShmSize.value());
+    }
 
     if (!options.Entrypoint.empty())
     {
@@ -330,9 +342,17 @@ std::wstring ContainerService::FormatPorts(WSLCContainerState state, const std::
 
 int ContainerService::Run(Session& session, const std::string& image, ContainerOptions runOptions)
 {
+    // Reserve the CID file (fails if it already exists) before creating the container so a
+    // container isn't created when the caller-requested path can't be written. The file is
+    // removed automatically if we don't reach Commit() below.
+    CidFile cidFile(runOptions.CidFile);
+
     // Create the container
     auto runningContainer = CreateInternal(session, image, runOptions);
     auto& container = runningContainer.Get();
+
+    WSLCContainerId containerId{};
+    THROW_IF_FAILED(container.GetId(containerId));
 
     // Start the created container
     WSLCContainerStartFlags startFlags{};
@@ -341,6 +361,7 @@ int ContainerService::Run(Session& session, const std::string& image, ContainerO
 
     // Disable auto-delete only after successful start
     runningContainer.SetDeleteOnClose(false);
+    cidFile.Commit(containerId);
 
     // Handle attach if requested
     if (WI_IsFlagSet(startFlags, WSLCContainerStartFlagsAttach))
@@ -349,19 +370,19 @@ int ContainerService::Run(Session& session, const std::string& image, ContainerO
         return consoleService.AttachToCurrentConsole(runningContainer.GetInitProcess());
     }
 
-    WSLCContainerId containerId{};
-    THROW_IF_FAILED(container.GetId(containerId));
     PrintMessage(L"%hs", stdout, containerId);
     return 0;
 }
 
 CreateContainerResult ContainerService::Create(Session& session, const std::string& image, ContainerOptions runOptions)
 {
+    CidFile cidFile(runOptions.CidFile);
     auto runningContainer = CreateInternal(session, image, runOptions);
     runningContainer.SetDeleteOnClose(false);
     auto& container = runningContainer.Get();
     WSLCContainerId id{};
     THROW_IF_FAILED(container.GetId(id));
+    cidFile.Commit(id);
     return {.Id = id};
 }
 
@@ -472,7 +493,7 @@ InspectContainer ContainerService::Inspect(Session& session, const std::string& 
     return wsl::shared::FromJson<InspectContainer>(output.get());
 }
 
-void ContainerService::Logs(Session& session, const std::string& id, bool follow)
+void ContainerService::Logs(Session& session, const std::string& id, bool follow, ULONGLONG tail)
 {
     wil::com_ptr<IWSLCContainer> container;
     THROW_IF_FAILED(session.Get()->OpenContainer(id.c_str(), &container));
@@ -482,7 +503,7 @@ void ContainerService::Logs(Session& session, const std::string& id, bool follow
     WSLCLogsFlags flags = WSLCLogsFlagsNone;
     WI_SetFlagIf(flags, WSLCLogsFlagsFollow, follow);
 
-    THROW_IF_FAILED(container->Logs(flags, &stdoutHandle, &stderrHandle, 0, 0, 0));
+    THROW_IF_FAILED(container->Logs(flags, &stdoutHandle, &stderrHandle, 0, 0, tail));
 
     wsl::windows::common::relay::MultiHandleWait io;
     io.AddHandle(std::make_unique<wsl::windows::common::relay::RelayHandle<wsl::windows::common::relay::ReadHandle>>(

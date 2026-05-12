@@ -38,7 +38,7 @@ struct InspectMount
     NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectMount, Type, Source, Destination, ReadWrite);
 };
 
-struct InspectState
+struct ContainerInspectState
 {
     std::string Status;
     bool Running{};
@@ -46,14 +46,37 @@ struct InspectState
     std::string StartedAt;
     std::string FinishedAt;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectState, Status, Running, ExitCode, StartedAt, FinishedAt);
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ContainerInspectState, Status, Running, ExitCode, StartedAt, FinishedAt);
+};
+
+struct Ulimit
+{
+    std::string Name;
+    std::int64_t Soft{};
+    std::int64_t Hard{};
+
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Ulimit, Name, Soft, Hard);
 };
 
 struct InspectHostConfig
 {
     std::string NetworkMode;
+    std::int64_t Memory{};
+    std::int64_t NanoCpus{};
+    std::vector<Ulimit> Ulimits;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectHostConfig, NetworkMode);
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectHostConfig, NetworkMode, Memory, NanoCpus, Ulimits);
+};
+
+struct ContainerConfig
+{
+    std::optional<std::vector<std::string>> Env;
+    std::optional<std::vector<std::string>> Cmd;
+    std::optional<std::vector<std::string>> Entrypoint;
+    std::string User;
+    std::string WorkingDir;
+
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ContainerConfig, Env, Cmd, Entrypoint, User, WorkingDir);
 };
 
 struct InspectContainer
@@ -62,13 +85,14 @@ struct InspectContainer
     std::string Name;
     std::string Created;
     std::string Image;
-    InspectState State;
+    ContainerInspectState State;
     InspectHostConfig HostConfig;
+    ContainerConfig Config;
     std::map<std::string, std::vector<InspectPortBinding>> Ports;
     std::vector<InspectMount> Mounts;
     std::map<std::string, std::string> Labels;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectContainer, Id, Name, Created, Image, State, HostConfig, Ports, Mounts, Labels);
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectContainer, Id, Name, Created, Image, State, HostConfig, Config, Ports, Mounts, Labels);
 };
 
 struct ImageConfig
@@ -114,33 +138,33 @@ struct InspectVolume
     NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectVolume, Name, Driver, CreatedAt, DriverOpts, Labels, Status);
 };
 
-struct InspectIPAMConfig
+struct IPAMConfig
 {
     std::string Subnet;
     std::string Gateway;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectIPAMConfig, Subnet, Gateway);
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(IPAMConfig, Subnet, Gateway);
 };
 
-struct InspectIPAM
+struct IPAM
 {
     std::string Driver;
-    std::optional<std::vector<InspectIPAMConfig>> Config;
+    std::optional<std::vector<IPAMConfig>> Config;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectIPAM, Driver, Config);
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(IPAM, Driver, Config);
 };
 
-struct InspectNetwork
+struct Network
 {
     std::string Id;
     std::string Name;
     std::string Driver;
     std::string Scope;
     bool Internal{};
-    InspectIPAM IPAM;
+    IPAM IPAM;
     std::map<std::string, std::string> Labels;
 
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(InspectNetwork, Id, Name, Driver, Scope, Internal, IPAM, Labels);
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Network, Id, Name, Driver, Scope, Internal, IPAM, Labels);
 };
 
 } // namespace wsl::windows::common::wslc_schema
