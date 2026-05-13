@@ -118,8 +118,6 @@ void CreateConsole(_In_ LPCWSTR ConsoleTitle = nullptr);
 
 unique_proc_attribute_list CreateProcThreadAttributeList(_In_ DWORD AttributeCount);
 
-[[nodiscard]] HANDLE DuplicateHandle(_In_ HANDLE Handle, _In_ DWORD DesiredAccess = 0, _In_ BOOL InheritHandle = FALSE, _In_ DWORD Options = DUPLICATE_SAME_ACCESS);
-
 std::vector<gsl::byte> GenerateConfigurationMessage(
     _In_ const std::wstring& DistributionName,
     _In_ ULONG FixedDrivesBitmap = 0,
@@ -154,6 +152,12 @@ std::filesystem::path GetWslConfigPath(_In_opt_ HANDLE userToken = nullptr);
 bool IsPackageInstalled(_In_ LPCWSTR PackageFamilyName);
 
 bool IsServicePresent(_In_ LPCWSTR ServiceName);
+
+bool IsServiceRunning(_In_ LPCWSTR ServiceName);
+
+bool IsVirtioSerialConsoleSupported();
+
+bool IsVmemmSuffixSupported();
 
 bool IsWindows11OrAbove();
 
@@ -194,5 +198,9 @@ DWORD RunProcess(_Inout_ std::wstring& CommandLine);
 void SetHandleInheritable(_In_ HANDLE Handle, _In_ bool Inheritable = true);
 
 bool TryAttachConsole();
+
+void RegisterWithDcat(_In_ bool IncludeVersionNumber = true);
+
+void AppendCommonKernelCommandLine(_Inout_ std::wstring& kernelCmdLine, _In_ int pageReportingOrder);
 
 } // namespace wsl::windows::common::helpers

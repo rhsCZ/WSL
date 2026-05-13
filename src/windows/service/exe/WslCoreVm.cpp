@@ -39,19 +39,11 @@ using namespace std::string_literals;
 // Start of unaddressable memory if guest only supports the minimum 36-bit addressing.
 #define MAX_36_BIT_PAGE_IN_MB (0x1000000000 / _1MB)
 
-// Version numbers for various functionality that was backported.
-#define NICKEL_BUILD_FLOOR 22350
-#define VIRTIO_SERIAL_CONSOLE_COBALT_RELEASE_UBR 40
-#define VMEMM_SUFFIX_COBALT_REFRESH_BUILD_NUMBER 22138
-#define VMMEM_SUFFIX_COBALT_RELEASE_UBR 71
-#define VMMEM_SUFFIX_NICKEL_BUILD_NUMBER 22420
-
 #define WSLG_SHARED_MEMORY_SIZE_MB 8192
 #define PAGE_SIZE 0x1000
 
 static constexpr size_t c_bootEntropy = 0x1000;
 static constexpr auto c_localDevicesKey = L"SOFTWARE\\Microsoft\\Terminal Server Client\\LocalDevices";
-static constexpr std::pair<uint32_t, uint32_t> c_schemaVersionNickel{2, 7};
 
 #define LXSS_ENABLE_GUI_APPS() (m_vmConfig.EnableGuiApps && (m_systemDistroDeviceId != ULONG_MAX))
 
@@ -229,6 +221,7 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
     }
 
     // If the user did not specify custom modules, use the default modules only if using the default kernel.
+    m_privateKernelModules = !m_vmConfig.KernelModulesPath.empty();
     if (m_vmConfig.KernelModulesPath.empty())
     {
         if (m_defaultKernel)
@@ -236,6 +229,7 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
 #ifdef WSL_KERNEL_MODULES_PATH
 
             m_vmConfig.KernelModulesPath = std::wstring(TEXT(WSL_KERNEL_MODULES_PATH));
+            m_privateKernelModules = true;
 
 #else
 
@@ -276,14 +270,15 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
 
     // If the system supports virtio console serial ports, use dmesg capture for telemetry and/or debug output.
     // Legacy serial is much slower, so this is not enabled without virtio console support.
-    m_vmConfig.EnableDebugShell &= IsVirtioSerialConsoleSupported();
-    if (IsVirtioSerialConsoleSupported())
+    auto enableVirtioSerial = m_vmConfig.EnableVirtio && helpers::IsVirtioSerialConsoleSupported();
+    m_vmConfig.EnableDebugShell &= enableVirtioSerial;
+    if (enableVirtioSerial)
     {
         try
         {
             bool enableTelemetry = TraceLoggingProviderEnabled(g_hTraceLoggingProvider, WINEVENT_LEVEL_INFO, 0);
             m_dmesgCollector = DmesgCollector::Create(
-                VmId, m_vmExitEvent, enableTelemetry, m_vmConfig.EnableDebugConsole, m_comPipe0, m_vmConfig.EnableEarlyBootLogging);
+                VmId, m_vmExitEvent, enableTelemetry, m_vmConfig.EnableDebugConsole, m_comPipe0, m_vmConfig.EnableEarlyBootLogging, {});
 
             WSL_LOG("DMESG collector created");
 
@@ -365,7 +360,7 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
         gpuRequest.RequestType = hcs::ModifyRequestType::Update;
         gpuRequest.Settings.AssignmentMode = hcs::GpuAssignmentMode::Mirror;
         gpuRequest.Settings.AllowVendorExtension = true;
-        if (IsDisableVgpuSettingsSupported())
+        if (wsl::windows::common::hcs::IsDisableVgpuSettingsSupported())
         {
             gpuRequest.Settings.DisableGdiAcceleration = true;
             gpuRequest.Settings.DisablePresentation = true;
@@ -436,7 +431,8 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
     }
 
     // Accept a connection from mini_init with a receive timeout so the service does not get stuck waiting for a response from the VM.
-    m_miniInitChannel = wsl::shared::SocketChannel{AcceptConnection(m_vmConfig.KernelBootTimeout), "mini_init", m_terminatingEvent.get()};
+    m_miniInitChannel =
+        wsl::shared::SocketChannel{AcceptConnection(m_vmConfig.KernelBootTimeout), "mini_init", {m_terminatingEvent.get()}};
 
     // Accept the connection from the Linux guest for notifications.
     m_notifyChannel = AcceptConnection(m_vmConfig.KernelBootTimeout);
@@ -516,18 +512,19 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
     message->SwapLun = swapLun;
     message->SystemDistroDeviceType = m_systemDistroDeviceType;
     message->SystemDistroDeviceId = m_systemDistroDeviceId;
-    message->PageReportingOrder = m_coldDiscardShiftSize;
     message->MemoryReclaimMode = static_cast<LX_MINI_INIT_MEMORY_RECLAIM_MODE>(m_vmConfig.MemoryReclaim);
     message->EnableDebugShell = m_vmConfig.EnableDebugShell;
     message->EnableSafeMode = m_vmConfig.EnableSafeMode;
-    message->EnableDnsTunneling = m_vmConfig.EnableDnsTunneling;
+    // Virtio proxy forwards DNS via the host proxy, so the dedicated DNS hvsocket is only used by NAT and Mirrored modes.
+    message->EnableDnsTunneling = m_vmConfig.EnableDnsTunneling && m_vmConfig.NetworkingMode != NetworkingMode::VirtioProxy;
     message->DefaultKernel = m_defaultKernel;
     message->KernelModulesDeviceId = m_kernelModulesDeviceId;
     message.WriteString(message->HostnameOffset, wsl::windows::common::filesystem::GetLinuxHostName());
     message.WriteString(message->KernelModulesListOffset, m_vmConfig.KernelModulesList);
     message->DnsTunnelingIpAddress = m_vmConfig.DnsTunnelingIpAddress.value_or(0);
 
-    m_miniInitChannel.SendMessage<LX_MINI_INIT_EARLY_CONFIG_MESSAGE>(message.Span());
+    auto transaction = m_miniInitChannel.StartTransaction();
+    transaction.Send<LX_MINI_INIT_EARLY_CONFIG_MESSAGE>(message.Span());
 
     {
         ExecutionContext context(Context::ConfigureNetworking);
@@ -537,7 +534,7 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
 
         // Create hvsocket connection for DNS tunneling if enabled.
         wil::unique_socket dnsTunnelingSocket;
-        if (m_vmConfig.EnableDnsTunneling)
+        if (message->EnableDnsTunneling)
         {
             dnsTunnelingSocket = AcceptConnection(m_vmConfig.KernelBootTimeout);
         }
@@ -576,8 +573,11 @@ void WslCoreVm::Initialize(const GUID& VmId, const wil::shared_handle& UserToken
             }
             else if (m_vmConfig.NetworkingMode == NetworkingMode::VirtioProxy)
             {
-                wsl::core::VirtioNetworkingFlags flags = wsl::core::VirtioNetworkingFlags::None;
+                wsl::core::VirtioNetworkingFlags flags = wsl::core::VirtioNetworkingFlags::Ipv6;
                 WI_SetFlagIf(flags, wsl::core::VirtioNetworkingFlags::LocalhostRelay, m_vmConfig.EnableLocalhostRelay);
+                WI_SetFlagIf(flags, wsl::core::VirtioNetworkingFlags::DnsTunneling, m_vmConfig.EnableDnsTunneling);
+                // NAT may have fallen back to virtio proxy after the early-config message; drop the unused DNS hvsocket.
+                dnsTunnelingSocket.reset();
                 m_networkingEngine = std::make_unique<wsl::core::VirtioNetworking>(
                     std::move(gnsChannel), flags, LX_INIT_RESOLVCONF_FULL_HEADER, m_guestDeviceManager, m_userToken);
             }
@@ -762,10 +762,7 @@ WslCoreVm::~WslCoreVm() noexcept
     }
 
     // Shutdown virtio device hosts.
-    if (m_guestDeviceManager)
-    {
-        m_guestDeviceManager->Shutdown();
-    }
+    m_guestDeviceManager.reset();
 
     // Call RevokeVmAccess on each VHD that was added to the utility VM. This
     // ensures that the ACL on the VHD does not grow unbounded.
@@ -868,37 +865,6 @@ void WslCoreVm::AddDrvFsShare(_In_ bool Admin, _In_ HANDLE UserToken)
             fixedDrives ^= (1 << index);
         }
     }
-}
-
-bool WslCoreVm::IsDisableVgpuSettingsSupported() const
-{
-    // See if the Windows version has the required platform change.
-    return ((wsl::windows::common::hcs::GetSchemaVersion() >= c_schemaVersionNickel) && (m_windowsVersion.BuildNumber >= 22545));
-}
-
-bool WslCoreVm::IsVirtioSerialConsoleSupported() const
-{
-    if (!m_vmConfig.EnableVirtio)
-    {
-        return false;
-    }
-
-    // See if the Windows version has the required platform change.
-    //
-    // N.B. If the package is running on a vibranium or iron build, then it means that lifted
-    //      support is available, so virtio serial is available as well (since it was done in the same LCU).
-    return m_windowsVersion.BuildNumber != WindowsBuildNumbers::Cobalt ||
-           m_windowsVersion.UpdateBuildRevision >= VIRTIO_SERIAL_CONSOLE_COBALT_RELEASE_UBR;
-}
-
-bool WslCoreVm::IsVmemmSuffixSupported() const
-{
-    // See if the Windows version has the required platform change.
-    return (
-        (m_windowsVersion.BuildNumber >= VMMEM_SUFFIX_NICKEL_BUILD_NUMBER) ||
-        ((m_windowsVersion.BuildNumber < NICKEL_BUILD_FLOOR) && (m_windowsVersion.BuildNumber >= VMEMM_SUFFIX_COBALT_REFRESH_BUILD_NUMBER)) ||
-        ((m_windowsVersion.BuildNumber == WindowsBuildNumbers::Cobalt) &&
-         (m_windowsVersion.UpdateBuildRevision >= VMMEM_SUFFIX_COBALT_RELEASE_UBR)));
 }
 
 _Requires_lock_held_(m_guestDeviceLock)
@@ -1097,17 +1063,27 @@ void WslCoreVm::CollectCrashDumps(wil::unique_socket&& listenSocket) const
             DWORD receiveTimeout = m_vmConfig.KernelBootTimeout;
             THROW_LAST_ERROR_IF(setsockopt(socket->get(), SOL_SOCKET, SO_RCVTIMEO, (const char*)&receiveTimeout, sizeof(receiveTimeout)) == SOCKET_ERROR);
 
-            auto channel = wsl::shared::SocketChannel{std::move(socket.value()), "crash_dump", m_terminatingEvent.get()};
+            auto channel = wsl::shared::SocketChannel{std::move(socket.value()), "crash_dump", {m_terminatingEvent.get()}};
 
-            const auto& message = channel.ReceiveMessage<LX_PROCESS_CRASH>();
-            const char* process = reinterpret_cast<const char*>(&message.Buffer);
+            auto transaction = channel.ReceiveTransaction();
+            gsl::span<gsl::byte> responseSpan;
+            const auto& message = transaction.Receive<LX_PROCESS_CRASH>(&responseSpan);
+
+            // Safely extract the process name from the flexible array member.
+            // The buffer may not be NUL-terminated, so bound the length to the received span size.
+            const auto bufferSize = responseSpan.size_bytes() - offsetof(LX_PROCESS_CRASH, Buffer);
+            const std::string process(message.Buffer, strnlen(message.Buffer, bufferSize));
 
             constexpr auto dumpExtension = ".dmp";
             constexpr auto dumpPrefix = "wsl-crash";
 
             auto filename = std::format("{}-{}-{}-{}-{}{}", dumpPrefix, message.Timestamp, message.Pid, process, message.Signal, dumpExtension);
 
-            std::replace_if(filename.begin(), filename.end(), [](auto e) { return !std::isalnum(e) && e != '.' && e != '-'; }, '_');
+            std::replace_if(
+                filename.begin(),
+                filename.end(),
+                [](char e) { return !std::isalnum(static_cast<unsigned char>(e)) && e != '.' && e != '-'; },
+                '_');
 
             auto fullPath = m_vmConfig.CrashDumpFolder / filename;
 
@@ -1118,7 +1094,7 @@ void WslCoreVm::CollectCrashDumps(wil::unique_socket&& listenSocket) const
                 TraceLoggingValue(fullPath.c_str(), "FullPath"),
                 TraceLoggingValue(message.Pid, "Pid"),
                 TraceLoggingValue(message.Signal, "Signal"),
-                TraceLoggingValue(process, "process"));
+                TraceLoggingValue(process.c_str(), "process"));
 
             auto runAsUser = wil::impersonate_token(m_userToken.get());
 
@@ -1147,7 +1123,7 @@ void WslCoreVm::CollectCrashDumps(wil::unique_socket&& listenSocket) const
             wil::unique_hfile file{CreateFileW(fullPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, nullptr)};
             THROW_LAST_ERROR_IF(!file);
 
-            channel.SendResultMessage<std::int32_t>(0);
+            transaction.SendResultMessage<std::int32_t>(0);
 
             wsl::windows::common::relay::InterruptableRelay(reinterpret_cast<HANDLE>(channel.Socket()), file.get(), nullptr);
         }
@@ -1207,7 +1183,8 @@ std::shared_ptr<LxssRunningInstance> WslCoreVm::CreateInstance(
     message.WriteString(message->SharedMemoryRootOffset, sharedMemoryRoot);
     message.WriteString(message->InstallPathOffset, installPath);
     message.WriteString(message->UserProfileOffset, userProfile);
-    m_miniInitChannel.SendMessage<LX_MINI_INIT_MESSAGE>(message.Span());
+    auto transaction = m_miniInitChannel.StartTransaction();
+    transaction.Send<LX_MINI_INIT_MESSAGE>(message.Span());
 
     return CreateInstanceInternal(
         InstanceId, Configuration, ReceiveTimeout, DefaultUid, ClientLifetimeId, WI_IsFlagSet(flags, LxMiniInitMessageFlagLaunchSystemDistro), ConnectPort);
@@ -1417,9 +1394,9 @@ std::wstring WslCoreVm::GenerateConfigJson()
     vmSettings.ComputeTopology.Memory.EnableDeferredCommit = true;
     vmSettings.ComputeTopology.Memory.EnableColdDiscardHint = true;
 
-    // Configure backing page size, fault cluster shift size, and cold discard hint size to favor density (lower vmmem usage).
+    // Configure backing page size, fault cluster shift size, and page reporting order to favor density (lower vmmem usage).
     //
-    // N.B. Cold discard hint size should be a multiple of the fault cluster shift size.
+    // N.B. Page reporting order must be >= fault cluster size shift.
     //
     // N.B. This is only done on builds that have the fix for the VID deadlock on partition teardown.
     if ((m_windowsVersion.BuildNumber >= WindowsBuildNumbers::Germanium) ||
@@ -1430,11 +1407,11 @@ std::wstring WslCoreVm::GenerateConfigJson()
         vmSettings.ComputeTopology.Memory.BackingPageSize = hcs::MemoryBackingPageSize::Small;
         vmSettings.ComputeTopology.Memory.FaultClusterSizeShift = 4;          // 64k
         vmSettings.ComputeTopology.Memory.DirectMapFaultClusterSizeShift = 4; // 64k
-        m_coldDiscardShiftSize = 5;                                           // 128k
+        m_pageReportingOrder = 5;                                             // 128k
     }
     else
     {
-        m_coldDiscardShiftSize = 9; // 2MB
+        m_pageReportingOrder = 9; // 2MB
     }
 
     // May need more MMIO than the default 16GB. WSL uses a vpci device per Plan9 share, WSLg adds a GPU device,
@@ -1508,7 +1485,7 @@ std::wstring WslCoreVm::GenerateConfigJson()
     vmSettings.ComputeTopology.Processor.Count = m_vmConfig.ProcessorCount;
 
     // Set the vmmem suffix which will change the process name in task manager.
-    if (IsVmemmSuffixSupported())
+    if (helpers::IsVmemmSuffixSupported())
     {
         vmSettings.ComputeTopology.Memory.HostingProcessNameSuffix = wsl::windows::common::wslutil::c_vmOwner;
     }
@@ -1560,16 +1537,16 @@ std::wstring WslCoreVm::GenerateConfigJson()
     // Set number of processors.
     kernelCmdLine += std::format(L" nr_cpus={}", m_vmConfig.ProcessorCount);
 
-    // Enable timesync workaround to sync on resume from sleep in modern standby.
-    kernelCmdLine += L" hv_utils.timesync_implicit=1";
+    // Append common kernel parameters shared between WSL2 and WSLC.
+    helpers::AppendCommonKernelCommandLine(kernelCmdLine, m_pageReportingOrder);
 
-    // If using virtio-9p, enable SWIOTLB as a perf optimization (will cause VM to consume 64MB more memory).
-    if (m_vmConfig.EnableVirtio9p)
+    // If using virtio features, enable SWIOTLB as a perf optimization (will cause VM to consume 64MB more memory).
+    if (m_vmConfig.EnableVirtio9p || m_vmConfig.EnableVirtioFs || m_vmConfig.NetworkingMode == NetworkingMode::VirtioProxy)
     {
         kernelCmdLine += L" swiotlb=force";
     }
 
-    if (IsVirtioSerialConsoleSupported())
+    if (m_vmConfig.EnableVirtio && helpers::IsVirtioSerialConsoleSupported())
     {
         vmSettings.Devices.VirtioSerial.emplace();
     }
@@ -1723,7 +1700,11 @@ std::wstring WslCoreVm::GenerateConfigJson()
 
     // Initialize SCSI devices.
     hcs::Scsi scsiController{};
-    auto attachDisk = [&](PCWSTR path) {
+
+    // grantVmAccess should be true for user-supplied paths. Best-effort: failures (e.g. no
+    // WRITE_DAC on a SYSTEM-owned VHD) are swallowed since VMWP may already have access via
+    // inherited ACLs; otherwise StartComputeSystem will surface E_ACCESSDENIED.
+    auto attachDisk = [&](PCWSTR path, bool grantVmAccess) {
         auto lun = ReserveLun();
         hcs::Attachment disk{};
         disk.Type = hcs::AttachmentType::VirtualDisk;
@@ -1733,18 +1714,31 @@ std::wstring WslCoreVm::GenerateConfigJson()
         disk.AlwaysAllowSparseFiles = true;
         disk.SupportEncryptedFiles = true;
         scsiController.Attachments[std::to_string(lun)] = std::move(disk);
-        m_attachedDisks.emplace(AttachedDisk{DiskType::VHD, path, false}, DiskState{lun, {}, {}});
+
+        DiskStateFlags diskFlags{};
+        if (grantVmAccess)
+        {
+            try
+            {
+                auto runAsUser = wil::impersonate_token(m_userToken.get());
+                wsl::windows::common::hcs::GrantVmAccess(m_machineId.c_str(), path);
+                WI_SetFlag(diskFlags, DiskStateFlags::AccessGranted);
+            }
+            CATCH_LOG()
+        }
+
+        m_attachedDisks.emplace(AttachedDisk{DiskType::VHD, path, false}, DiskState{lun, {}, diskFlags});
         return lun;
     };
 
     if (m_systemDistroDeviceType == LxMiniInitMountDeviceTypeLun)
     {
-        m_systemDistroDeviceId = attachDisk(m_vmConfig.SystemDistroPath.c_str());
+        m_systemDistroDeviceId = attachDisk(m_vmConfig.SystemDistroPath.c_str(), privateSystemDistro);
     }
 
     if (!m_vmConfig.KernelModulesPath.empty())
     {
-        m_kernelModulesDeviceId = attachDisk(m_vmConfig.KernelModulesPath.c_str());
+        m_kernelModulesDeviceId = attachDisk(m_vmConfig.KernelModulesPath.c_str(), m_privateKernelModules);
     }
 
     vmSettings.Devices.Scsi["0"] = std::move(scsiController);
@@ -1852,7 +1846,8 @@ void WslCoreVm::InitializeGuest()
     }
 
     // Send the message.
-    m_miniInitChannel.SendMessage<LX_MINI_INIT_CONFIG_MESSAGE>(message.Span());
+    auto transaction = m_miniInitChannel.StartTransaction();
+    transaction.Send<LX_MINI_INIT_CONFIG_MESSAGE>(message.Span());
 
     // If port tracker or localhost relay are enabled, establish a connection with the guest and start processing messages.
     switch (message->NetworkingConfiguration.PortTrackerType)
@@ -1878,6 +1873,7 @@ void WslCoreVm::InitializeGuest()
             const auto errorString = wsl::windows::common::wslutil::GetSystemErrorString(result);
             EMIT_USER_WARNING(wsl::shared::Localization::MessageLocalhostRelayFailed(errorString));
         }
+        break;
     }
 
     default:
@@ -1988,10 +1984,11 @@ WslCoreVm::DiskMountResult WslCoreVm::MountDiskLockHeld(
     message.WriteString(message->OptionsOffset, Options);
 
     // Send the message.
-    m_miniInitChannel.SendMessage<LX_MINI_INIT_MOUNT_MESSAGE>(message.Span());
+    auto transaction = m_miniInitChannel.StartTransaction();
+    transaction.Send<LX_MINI_INIT_MOUNT_MESSAGE>(message.Span());
 
     // Accept a connection from mini_init
-    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "MountResult", m_terminatingEvent.get()};
+    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "MountResult", {m_terminatingEvent.get()}};
 
     // Get the mount result from mini_init
     auto [mountResult, step] = GetMountResult(channel);
@@ -2116,11 +2113,12 @@ void WslCoreVm::WaitForPmemDeviceInVm(_In_ ULONG PmemId)
     {
         auto lock = m_lock.lock_exclusive();
 
-        m_miniInitChannel.SendMessage(message);
+        auto transaction = m_miniInitChannel.StartTransaction();
+        transaction.Send(message);
         channel = {
             AcceptConnection(m_vmConfig.KernelBootTimeout),
             "WaitForPmem",
-            m_terminatingEvent.get(),
+            {m_terminatingEvent.get()},
         };
     }
 
@@ -2136,7 +2134,7 @@ void WslCoreVm::WaitForPmemDeviceInVm(_In_ ULONG PmemId)
 }
 
 _Requires_lock_held_(m_guestDeviceLock)
-std::wstring WslCoreVm::AddVirtioFsShare(_In_ bool Admin, _In_ PCWSTR Path, _In_ PCWSTR Options, _In_opt_ HANDLE UserToken)
+std::pair<std::wstring, std::wstring> WslCoreVm::AddVirtioFsShare(_In_ bool Admin, _In_ PCWSTR Path, _In_ PCWSTR Options, _In_opt_ HANDLE UserToken)
 {
     WI_ASSERT(m_vmConfig.EnableVirtioFs);
 
@@ -2198,7 +2196,7 @@ std::wstring WslCoreVm::AddVirtioFsShare(_In_ bool Admin, _In_ PCWSTR Path, _In_
         TraceLoggingValue(created, "created"),
         TraceLoggingValue(m_virtioFsShares.size(), "shareCount"));
 
-    return tag;
+    return {tag, sharePath};
 }
 
 void WslCoreVm::OnCrash(_In_ LPCWSTR Details)
@@ -2375,6 +2373,7 @@ void WslCoreVm::RegisterCallbacks(_In_ const std::function<void(ULONG)>& DistroE
                         const auto* exitMessage = gslhelpers::try_get_struct<LX_MINI_INIT_CHILD_EXIT_MESSAGE>(message);
                         if (exitMessage)
                         {
+                            WSL_LOG("ProcessExited", TraceLoggingValue(exitMessage->ChildPid, "pid"));
                             exitCallback(exitMessage->ChildPid);
                         }
                     }
@@ -2425,9 +2424,10 @@ void WslCoreVm::ResizeDistribution(_In_ ULONG Lun, _In_ HANDLE OutputHandle, _In
     message.ScsiLun = Lun;
     message.NewSize = NewSize;
 
-    m_miniInitChannel.SendMessage(message);
+    auto transaction = m_miniInitChannel.StartTransaction();
+    transaction.Send(message);
 
-    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "ResizeDistribution", m_terminatingEvent.get()};
+    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "ResizeDistribution", {m_terminatingEvent.get()}};
     auto outputChannel = AcceptConnection(m_vmConfig.KernelBootTimeout);
 
     wsl::windows::common::relay::ScopedRelay outputRelay(std::move(outputChannel), OutputHandle);
@@ -2502,10 +2502,11 @@ std::pair<int, LX_MINI_MOUNT_STEP> WslCoreVm::UnmountDisk(_In_ const AttachedDis
     message.Header.MessageSize = sizeof(message);
     message.ScsiLun = State.Lun;
 
-    m_miniInitChannel.SendMessage(message);
+    auto transaction = m_miniInitChannel.StartTransaction();
+    transaction.Send(message);
 
     // Accept a connection from mini_init.
-    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "MountResult", m_terminatingEvent.get()};
+    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "MountResult", {m_terminatingEvent.get()}};
 
     // Get the unmount result from mini_init
     return GetMountResult(channel);
@@ -2517,10 +2518,11 @@ std::pair<int, LX_MINI_MOUNT_STEP> WslCoreVm::UnmountVolume(_In_ const AttachedD
     message.WriteString(Name);
 
     // Send the message.
-    m_miniInitChannel.SendMessage<LX_MINI_INIT_UNMOUNT_MESSAGE>(message.Span());
+    auto transaction = m_miniInitChannel.StartTransaction();
+    transaction.Send<LX_MINI_INIT_UNMOUNT_MESSAGE>(message.Span());
 
     // Accept a connection from mini_init.
-    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "MountResult", m_terminatingEvent.get()};
+    wsl::shared::SocketChannel channel{AcceptConnection(m_vmConfig.KernelBootTimeout), "MountResult", {m_terminatingEvent.get()}};
 
     // Get the unmount result from mini_init.
     return GetMountResult(channel);
@@ -2577,32 +2579,35 @@ try
             break;
         }
 
-        wsl::shared::SocketChannel channel{std::move(socket.value()), "VirtioFs", m_terminatingEvent.get()};
+        wsl::shared::SocketChannel channel{std::move(socket.value()), "VirtioFs", {m_terminatingEvent.get()}};
         std::thread([this, channel = std::move(channel)]() mutable {
             try
             {
                 wsl::windows::common::wslutil::SetThreadDescription(L"VirtioFs - Request");
 
-                auto [message, span] = channel.ReceiveMessageOrClosed<MESSAGE_HEADER>();
+                auto transaction = channel.ReceiveTransaction();
+                auto [message, span] = transaction.ReceiveOrClosed<MESSAGE_HEADER>();
                 if (message == nullptr)
                 {
                     return;
                 }
 
-                auto respondWithTag = [&](const std::wstring& tag, HRESULT result) {
+                auto respondWithTag = [&](const std::wstring& tag, const std::wstring& source, HRESULT result) {
                     // Respond to the guest with the tag that should be used to mount the device.
 
                     wsl::shared::MessageWriter<LX_INIT_ADD_VIRTIOFS_SHARE_RESPONSE_MESSAGE> response(LxInitMessageAddVirtioFsDeviceResponse);
                     response->Result = SUCCEEDED(result) ? 0 : EINVAL; // TODO: Improved HRESULT -> errno mapping.
                     response.WriteString(response->TagOffset, tag);
+                    response.WriteString(response->SourceOffset, source);
 
-                    channel.SendMessage<LX_INIT_ADD_VIRTIOFS_SHARE_RESPONSE_MESSAGE>(response.Span());
+                    transaction.Send<LX_INIT_ADD_VIRTIOFS_SHARE_RESPONSE_MESSAGE>(response.Span());
                 };
 
                 if (message->MessageType == LxInitMessageAddVirtioFsDevice)
                 {
                     std::wstring tag;
-                    const auto result = wil::ResultFromException([this, span, &tag]() {
+                    std::wstring source;
+                    const auto result = wil::ResultFromException([this, span, &tag, &source]() {
                         const auto* addShare = gslhelpers::try_get_struct<LX_INIT_ADD_VIRTIOFS_SHARE_MESSAGE>(span);
                         THROW_HR_IF(E_UNEXPECTED, !addShare);
 
@@ -2613,15 +2618,16 @@ try
 
                         // Acquire the lock and attempt to add the device.
                         auto guestDeviceLock = m_guestDeviceLock.lock_exclusive();
-                        tag = AddVirtioFsShare(addShare->Admin, pathWide.c_str(), optionsWide.c_str());
+                        std::tie(tag, source) = AddVirtioFsShare(addShare->Admin, pathWide.c_str(), optionsWide.c_str());
                     });
 
-                    respondWithTag(tag, result);
+                    respondWithTag(tag, source, result);
                 }
                 else if (message->MessageType == LxInitMessageRemountVirtioFsDevice)
                 {
                     std::wstring newTag;
-                    const auto result = wil::ResultFromException([this, span, &newTag]() {
+                    std::wstring source;
+                    const auto result = wil::ResultFromException([this, span, &newTag, &source]() {
                         const auto* remountShare = gslhelpers::try_get_struct<LX_INIT_REMOUNT_VIRTIOFS_SHARE_MESSAGE>(span);
                         THROW_HR_IF(E_UNEXPECTED, !remountShare);
 
@@ -2631,28 +2637,13 @@ try
                         const auto foundShare = FindVirtioFsShare(tagWide.c_str(), !remountShare->Admin);
                         THROW_HR_IF_MSG(E_UNEXPECTED, !foundShare.has_value(), "Unknown tag %ls", tagWide.c_str());
 
-                        newTag = AddVirtioFsShare(remountShare->Admin, foundShare->Path.c_str(), foundShare->OptionsString().c_str());
+                        std::tie(newTag, source) =
+                            AddVirtioFsShare(remountShare->Admin, foundShare->Path.c_str(), foundShare->OptionsString().c_str());
+
+                        WI_ASSERT(source == foundShare->Path);
                     });
 
-                    respondWithTag(newTag, result);
-                }
-                else if (message->MessageType == LxInitMessageQueryVirtioFsDevice)
-                {
-                    std::wstring newTag;
-                    const auto result = wil::ResultFromException([this, span, &newTag]() {
-                        const auto* query = gslhelpers::try_get_struct<LX_INIT_QUERY_VIRTIOFS_SHARE_MESSAGE>(span);
-                        THROW_HR_IF(E_UNEXPECTED, !query);
-
-                        const std::string tag = wsl::shared::string::FromSpan(span, query->TagOffset);
-                        const auto tagWide = wsl::shared::string::MultiByteToWide(tag);
-                        auto guestDeviceLock = m_guestDeviceLock.lock_exclusive();
-                        const auto foundShare = FindVirtioFsShare(tagWide.c_str());
-                        THROW_HR_IF_MSG(E_UNEXPECTED, !foundShare.has_value(), "Unknown tag %ls", tagWide.c_str());
-
-                        newTag = foundShare->Path;
-                    });
-
-                    respondWithTag(newTag, result);
+                    respondWithTag(newTag, source, result);
                 }
                 else
                 {
@@ -2852,6 +2843,24 @@ void WslCoreVm::ValidateNetworkingMode()
         }
     }
 
+    // If mirrored networking was requested, ensure IPv6 is not disabled on the host using registry,
+    // as this is not supported by mirrored networking.
+    // Note: Disabling IPv6 using Set-NetAdapterBinding is supported.
+    if (m_vmConfig.NetworkingMode == NetworkingMode::Mirrored)
+    {
+        constexpr DWORD c_ipv6Disabled = 0xFF;
+        DWORD disabledComponents = 0;
+        wil::reg::get_value_dword_nothrow(
+            HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters", L"DisabledComponents", &disabledComponents);
+
+        if (disabledComponents == c_ipv6Disabled)
+        {
+            m_vmConfig.NetworkingMode = NetworkingMode::Nat;
+            EMIT_USER_WARNING(Localization::MessageMirroredNetworkingNotSupportedReason(
+                Localization::MessageMirroredNetworkingNotSupportedIpv6Disabled()));
+        }
+    }
+
     // If mirrored networking was requested, ensure it is supported by the OS and guest kernel.
     if (m_vmConfig.NetworkingMode == NetworkingMode::Mirrored)
     {
@@ -2877,7 +2886,7 @@ void WslCoreVm::ValidateNetworkingMode()
         EMIT_USER_WARNING(Localization::MessageLocalhostForwardingNotSupportedMirroredMode());
     }
 
-    // If DNS tunneling was requested, ensure it is supported by Windows.
+    // The DnsResolver support check still applies to virtio proxy because the host virtio proxy uses the same Windows DNS APIs.
     if (m_vmConfig.EnableDnsTunneling && !IsDnsTunnelingSupported())
     {
         // Since DNS tunneling is enabled by default, only show the warning if the user explicitly asked for it.

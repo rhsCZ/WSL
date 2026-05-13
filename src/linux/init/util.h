@@ -35,7 +35,8 @@ Abstract:
 
 namespace wsl::shared {
 class SocketChannel;
-}
+class Transaction;
+} // namespace wsl::shared
 
 namespace wsl::linux {
 struct WslDistributionConfig;
@@ -117,7 +118,7 @@ private:
     wil::unique_fd m_InteropSocket;
 };
 
-int UtilAcceptVsock(int SocketFd, sockaddr_vm Address, int Timeout = -1);
+int UtilAcceptVsock(int SocketFd, sockaddr_vm Address, int Timeout = -1, int SocketFlags = SOCK_CLOEXEC);
 
 int UtilBindVsockAnyPort(struct sockaddr_vm* SocketAddress, int Type);
 
@@ -191,7 +192,8 @@ Return Value:
     _exit(1);
 }
 
-int UtilCreateProcessAndWait(const char* File, const char* const Argv[], int* Status = nullptr, const std::map<std::string, std::string>& Env = {});
+int UtilCreateProcessAndWait(
+    const char* File, const char* const Argv[], int* Status = nullptr, const std::map<std::string, std::string>& Env = {}, bool DetachTerminal = false);
 
 template <typename TMethod>
 void UtilCreateWorkerThread(const char* Name, TMethod&& ThreadFunction)
@@ -248,6 +250,8 @@ int UtilListenVsockAnyPort(struct sockaddr_vm* Address, int Backlog, bool CloseO
 int UtilMkdir(const char* Path, mode_t Mode);
 
 int UtilMkdirPath(const char* Path, mode_t Mode, bool SkipLast = false);
+
+int UtilMountFile(const char* Source, const char* Destination);
 
 int UtilMount(const char* Source, const char* Target, const char* Type, unsigned long MountFlags, const char* Options, std::optional<std::chrono::seconds> TimeoutSeconds = {});
 
@@ -311,4 +315,4 @@ uint16_t UtilWinAfToLinuxAf(uint16_t AddressFamily);
 
 int WriteToFile(const char* Path, const char* Content, int permissions = 0644);
 
-int ProcessCreateProcessMessage(wsl::shared::SocketChannel& channel, gsl::span<gsl::byte> Buffer);
+int ProcessCreateProcessMessage(wsl::shared::Transaction& Transaction, gsl::span<gsl::byte> Buffer);

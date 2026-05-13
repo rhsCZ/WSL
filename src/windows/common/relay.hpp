@@ -43,6 +43,13 @@ bool InterruptableWait(_In_ HANDLE WaitObject, _In_ const std::vector<HANDLE>& E
 DWORD
 InterruptableWrite(_In_ HANDLE OutputHandle, _In_ gsl::span<const gsl::byte> Buffer, _In_ const std::vector<HANDLE>& ExitHandles, _In_ LPOVERLAPPED Overlapped);
 
+bool StandardInputRelay(
+    HANDLE ConsoleHandle,
+    HANDLE OutputHandle,
+    const std::function<void()>& UpdateTerminalSize,
+    HANDLE ExitEvent,
+    const std::vector<char>& DetachSequence = {});
+
 enum class RelayFlags
 {
     None = 0,
@@ -224,6 +231,68 @@ private:
     std::function<void()> OnClose;
 };
 
+// A buffer that may either own its underlying storage (constructed from a size, allocating an
+// internal std::vector<char>) or borrow it from a caller-provided gsl::span<gsl::byte>.
+class BufferWrapper
+{
+public:
+    DEFAULT_MOVABLE(BufferWrapper);
+    NON_COPYABLE(BufferWrapper);
+
+    explicit BufferWrapper(size_t size) : m_owned(std::in_place, size)
+    {
+    }
+
+    explicit BufferWrapper(gsl::span<gsl::byte> span) : m_unowned(span)
+    {
+    }
+
+    bool Owned() const noexcept
+    {
+        return m_owned.has_value();
+    }
+
+    void Resize(size_t size)
+    {
+        THROW_HR_IF_MSG(E_UNEXPECTED, !Owned(), "BufferWrapper::Resize called on a non-owned buffer");
+        m_owned->resize(size);
+    }
+
+    void Append(gsl::span<char> Span)
+    {
+        THROW_HR_IF_MSG(E_UNEXPECTED, !Owned(), "BufferWrapper::Append called on a non-owned buffer");
+
+        m_owned->insert(m_owned->end(), Span.begin(), Span.end());
+    }
+
+    void Consume(size_t bytes) noexcept
+    {
+        WI_ASSERT(bytes <= Size());
+        if (Owned())
+        {
+            m_owned->erase(m_owned->begin(), m_owned->begin() + bytes);
+        }
+        else
+        {
+            m_unowned = m_unowned.subspan(bytes);
+        }
+    }
+
+    gsl::span<gsl::byte> Span() noexcept
+    {
+        return Owned() ? gsl::make_span(reinterpret_cast<gsl::byte*>(m_owned->data()), m_owned->size()) : m_unowned;
+    }
+
+    size_t Size() const noexcept
+    {
+        return Owned() ? m_owned->size() : m_unowned.size();
+    }
+
+private:
+    std::optional<std::vector<char>> m_owned;
+    gsl::span<gsl::byte> m_unowned;
+};
+
 class OverlappedIOHandle
 {
 public:
@@ -257,6 +326,28 @@ private:
     std::function<void()> OnSignalled;
 };
 
+class ReadHandle : public OverlappedIOHandle
+{
+public:
+    NON_COPYABLE(ReadHandle);
+    NON_MOVABLE(ReadHandle);
+
+    ReadHandle(HandleWrapper&& MovedHandle, std::function<void(const gsl::span<char>& Buffer)>&& OnRead);
+    virtual ~ReadHandle();
+
+    void Schedule() override;
+    void Collect() override;
+    HANDLE GetHandle() const override;
+
+private:
+    HandleWrapper Handle;
+    std::function<void(const gsl::span<char>& Buffer)> OnRead;
+    wil::unique_event Event{wil::EventOptions::ManualReset};
+    OVERLAPPED Overlapped{};
+    BufferWrapper Buffer{LX_RELAY_BUFFER_SIZE};
+    LARGE_INTEGER Offset{};
+};
+
 class SingleAcceptHandle : public OverlappedIOHandle
 {
 public:
@@ -279,14 +370,233 @@ private:
     char AcceptBuffer[2 * sizeof(SOCKADDR_STORAGE)];
 };
 
+class LineBasedReadHandle : public ReadHandle
+{
+public:
+    NON_COPYABLE(LineBasedReadHandle);
+    NON_MOVABLE(LineBasedReadHandle);
+
+    LineBasedReadHandle(HandleWrapper&& Handle, std::function<void(const gsl::span<char>& Buffer)>&& OnLine, bool Crlf);
+    ~LineBasedReadHandle();
+
+private:
+    void OnRead(const gsl::span<char>& Buffer);
+
+    std::function<void(const gsl::span<char>& Buffer)> OnLine;
+    std::string PendingBuffer;
+    bool Crlf{};
+};
+
+class HTTPChunkBasedReadHandle : public ReadHandle
+{
+public:
+    NON_COPYABLE(HTTPChunkBasedReadHandle);
+    NON_MOVABLE(HTTPChunkBasedReadHandle);
+
+    HTTPChunkBasedReadHandle(HandleWrapper&& Handler, std::function<void(const gsl::span<char>& Buffer)>&& OnChunk);
+    ~HTTPChunkBasedReadHandle();
+
+    void OnRead(const gsl::span<char>& Line);
+
+private:
+    std::function<void(const gsl::span<char>& Buffer)> OnChunk;
+    std::string PendingBuffer;
+    uint64_t PendingChunkSize = 0;
+    bool ExpectHeader = true;
+};
+
+class ReadSocketMessageHandle : public OverlappedIOHandle
+{
+public:
+    NON_COPYABLE(ReadSocketMessageHandle);
+    NON_MOVABLE(ReadSocketMessageHandle);
+
+    ReadSocketMessageHandle(HandleWrapper&& Socket, std::vector<gsl::byte>& Buffer, std::function<void(const gsl::span<gsl::byte>& Message)>&& OnMessage);
+    ~ReadSocketMessageHandle();
+
+    void Schedule() override;
+    void Collect() override;
+    HANDLE GetHandle() const override;
+
+private:
+    void ScheduleRecv();
+    void ProcessRecvResult(DWORD BytesRead);
+
+    HandleWrapper Socket;
+    std::vector<gsl::byte>& Buffer;
+    std::function<void(const gsl::span<gsl::byte>& Message)> OnMessage;
+    wil::unique_event Event{wil::EventOptions::ManualReset};
+    OVERLAPPED Overlapped{};
+    bool ReadingHeader = true;
+    size_t BytesRemaining = sizeof(MESSAGE_HEADER);
+    size_t CurrentOffset = 0;
+};
+
+class WriteHandle : public OverlappedIOHandle
+{
+public:
+    NON_COPYABLE(WriteHandle);
+    NON_MOVABLE(WriteHandle);
+
+    WriteHandle(HandleWrapper&& Handle, const std::vector<char>& Buffer = {});
+    WriteHandle(HandleWrapper&& Handle, gsl::span<gsl::byte> Span);
+    ~WriteHandle();
+    void Schedule() override;
+    void Collect() override;
+    HANDLE GetHandle() const override;
+    void Push(const gsl::span<char>& Buffer);
+
+private:
+    HandleWrapper Handle;
+    wil::unique_event Event{wil::EventOptions::ManualReset};
+    OVERLAPPED Overlapped{};
+    BufferWrapper Buffer;
+    LARGE_INTEGER Offset{};
+};
+
+template <typename TRead = ReadHandle>
+class RelayHandle : public OverlappedIOHandle
+{
+public:
+    NON_COPYABLE(RelayHandle);
+    NON_MOVABLE(RelayHandle);
+
+    RelayHandle(HandleWrapper&& Input, HandleWrapper&& Output) :
+        Read(std::move(Input), [this](const gsl::span<char>& Buffer) { return OnRead(Buffer); }), Write(std::move(Output))
+    {
+    }
+
+    void Schedule() override
+    {
+        WI_ASSERT(State == IOHandleStatus::Standby);
+
+        // If the Buffer is empty, then we're reading.
+        if (PendingBuffer.empty())
+        {
+            // If the output buffer is empty and the reading end is completed, then we're done.
+            if (Read.GetState() == IOHandleStatus::Completed)
+            {
+                State = IOHandleStatus::Completed;
+                return;
+            }
+
+            Read.Schedule();
+
+            // If the read is pending, update to 'Pending'
+            if (Read.GetState() == IOHandleStatus::Pending)
+            {
+                State = IOHandleStatus::Pending;
+            }
+        }
+        else
+        {
+            Write.Push(PendingBuffer);
+            PendingBuffer.clear();
+
+            Write.Schedule();
+
+            if (Write.GetState() == IOHandleStatus::Pending)
+            {
+                // The write is pending, update to 'Pending'
+                State = IOHandleStatus::Pending;
+            }
+        }
+    }
+
+    void Collect() override
+    {
+        WI_ASSERT(State == IOHandleStatus::Pending);
+
+        // Transition back to standby
+        State = IOHandleStatus::Standby;
+
+        if (Read.GetState() == IOHandleStatus::Pending)
+        {
+            Read.Collect();
+        }
+        else
+        {
+            WI_ASSERT(Write.GetState() == IOHandleStatus::Pending);
+            Write.Collect();
+        }
+    }
+
+    HANDLE GetHandle() const override
+    {
+        if (Read.GetState() == IOHandleStatus::Pending)
+        {
+            return Read.GetHandle();
+        }
+        else
+        {
+            WI_ASSERT(Write.GetState() == IOHandleStatus::Pending);
+            return Write.GetHandle();
+        }
+    }
+
+private:
+    void OnRead(const gsl::span<char>& Content)
+    {
+        PendingBuffer.insert(PendingBuffer.end(), Content.begin(), Content.end());
+    }
+
+    TRead Read;
+    WriteHandle Write;
+    std::vector<char> PendingBuffer;
+};
+
+class DockerIORelayHandle : public OverlappedIOHandle
+{
+public:
+    NON_COPYABLE(DockerIORelayHandle);
+    NON_MOVABLE(DockerIORelayHandle);
+
+    enum class Format
+    {
+        Raw,
+        HttpChunked
+    };
+
+    DockerIORelayHandle(HandleWrapper&& Input, HandleWrapper&& Stdout, HandleWrapper&& Stderr, Format ReadFormat);
+    void Schedule() override;
+    void Collect() override;
+    HANDLE GetHandle() const override;
+
+#pragma pack(push, 1)
+    struct MultiplexedHeader
+    {
+        uint8_t Fd;
+        char Zeroes[3];
+        uint32_t Length;
+    };
+#pragma pack(pop)
+
+    static_assert(sizeof(MultiplexedHeader) == 8);
+
+private:
+    void OnRead(const gsl::span<char>& Buffer);
+    void ProcessNextHeader();
+
+    std::unique_ptr<OverlappedIOHandle> Read;
+    WriteHandle WriteStdout;
+    WriteHandle WriteStderr;
+    std::vector<char> PendingBuffer;
+    WriteHandle* ActiveHandle = nullptr;
+    size_t RemainingBytes = 0;
+};
+
 class MultiHandleWait
 {
 public:
+    NON_COPYABLE(MultiHandleWait);
+    DEFAULT_MOVABLE(MultiHandleWait);
+
     enum Flags
     {
         None = 0,
         CancelOnCompleted = 1,
-        IgnoreErrors = 2
+        IgnoreErrors = 2,
+        NeedNotComplete = 4,
     };
 
     MultiHandleWait() = default;

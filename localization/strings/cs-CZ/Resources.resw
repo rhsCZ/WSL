@@ -117,6 +117,22 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <!--
+    Localization Glossary — Technical Terms
+    ========================================
+    The following technical terms appear in many strings throughout this file.
+    Per-string <comment> elements provide guidance for each occurrence, but
+    this glossary serves as a central reference for developers and reviewers.
+
+    "mount"   — Making a disk/filesystem accessible. Translate per locale or keep "mount".
+    "VHD"     — Virtual Hard Disk. Do not translate (file format name).
+    "tar"     — File archive format. Do not translate (file format name).
+    "swap"    — Virtual memory swap space. Translate per locale or keep "swap".
+    "sparse"  — Storage term: file uses disk space only for written data. Translate per locale.
+    "DNS"     — Domain Name System. Do not translate (protocol acronym).
+    "proxy"   — Network proxy server. Translate per locale standard networking term.
+    "safe mode" — Minimal/diagnostic startup mode. Use standard OS term per locale.
+  -->
   <data name="AppName" xml:space="preserve">
     <value>Subsystém Windows pro Linux</value>
   </data>
@@ -137,24 +153,27 @@ Chcete-li přinutit WSL2 zastavit a odpojit disk, spusťte 'wsl.exe {}'.</value>
   </data>
   <data name="MessageDiskAlreadyMounted" xml:space="preserve">
     <value>Tento svazek je již připojen do WSL2.</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageDiskMountNameAlreadyExists" xml:space="preserve">
     <value>Disk s tímto názvem je již připojen. Odpojte prosím disk nebo zvolte nový název a zkuste to znovu.</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageDiskMountNameInvalid" xml:space="preserve">
     <value>Zadaný název připojení obsahuje neplatný znak /. Zkuste to prosím znovu bez neplatného znaku.</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageDiskMounted" xml:space="preserve">
     <value>Disk byl úspěšně připojen jako /mnt/wsl/{}.
 Poznámka: Pokud jste změnili nastavení automount.root v /etc/wsl.conf, umístění se bude lišit.
 Pokud chcete disk odpojit a odpojit, spusťte příkaz wsl.exe {} {}.</value>
-    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated. "mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageDiskMountFailed" xml:space="preserve">
     <value>Disk se připojil, ale nepovedlo se ho připojit: {}.
 Další podrobnosti získáte spuštěním příkazu dmesg v rámci WSL2.
 Pokud chcete disk odpojit, spusťte wsl.exe {} {}.</value>
-    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated. "mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageDistributionListOnline" xml:space="preserve">
     <value>Následuje seznam platných distribucí, které lze nainstalovat.
@@ -169,7 +188,7 @@ Nainstalovat pomocí souboru wsl.exe {} &lt;Distro&gt;.
     <value>Zadané umístění instalace je již používáno.</value>
   </data>
   <data name="MessageDistroNameAlreadyExists" xml:space="preserve">
-    <value>Distribuce se zadaným názvem již existuje. Pomocí --name zvolte jiný název.</value>
+    <value>Distribuce se zadaným názvem už existuje. Pomocí --name zvolte jiný název.</value>
     <comment>{Locked="--name "}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageDistroNotFound" xml:space="preserve">
@@ -177,6 +196,7 @@ Nainstalovat pomocí souboru wsl.exe {} &lt;Distro&gt;.
   </data>
   <data name="MessageElevationNeededToMountDisk" xml:space="preserve">
     <value>Připojení disku vyžaduje přístup správce.</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageExportFailed" xml:space="preserve">
     <value>Export distribuce se nezdařil.</value>
@@ -216,9 +236,6 @@ Nainstalovat pomocí souboru wsl.exe {} &lt;Distro&gt;.
     <value>Neplatný název distribuce: '{}'.
 Pokud chcete získat seznam platných distribucí, použijte příkaz 'wsl.exe --list --online'.</value>
     <comment>{FixedPlaceholder="{}"}{Locked="--list "}{Locked="--online'"}Command line arguments, file names and string inserts should not be translated</comment>
-  </data>
-  <data name="MessageInstanceTerminated" xml:space="preserve">
-    <value>Instance Subsystém Windows pro Linux byla ukončena.</value>
   </data>
   <data name="MessageInvalidCommandLine" xml:space="preserve">
     <value>Neplatný argument příkazového řádku: {}
@@ -306,7 +323,7 @@ Další informace najdete na https://aka.ms/enablevirtualization</value>
   </data>
   <data name="MessageUserVhdAlreadyAttached" xml:space="preserve">
     <value>VHD se už připojil přes wsl.exe --mount, Před spuštěním prosím disk odpojte.</value>
-    <comment>{Locked="--mount,"}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{Locked="--mount,"}Command line arguments, file names and string inserts should not be translated. {Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageWsl1NotSupported" xml:space="preserve">
     <value>WSL1 se s aktuální konfigurací počítače nepodporuje.
@@ -377,215 +394,215 @@ Využití:
     <comment>{Locked="/l,"}{Locked="/list "}{Locked="/all "}{Locked="/running "}{Locked="/s,"}{Locked="/setdefault "}{Locked="/t,"}{Locked="/terminate "}{Locked="/u,"}{Locked="/unregister "}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageWslUsage" xml:space="preserve">
-    <value>Copyright (c) Microsoft Corporation. Všechna práva vyhrazena.
-Informace o ochraně osobních údajů k tomuto produktu najdete na stránce https://aka.ms/privacy.
+    <value>Copyright (c) Microsoft Corporation. All rights reserved.
+For privacy information about this product please visit https://aka.ms/privacy.
 
-Použití: wsl.exe [Argument] [Options...] [CommandLine]
+Usage: wsl.exe [Argument] [Options...] [CommandLine]
 
-Argumenty pro spouštění binárních souborů Linuxu:
+Arguments for running Linux binaries:
 
-    Pokud není zadaný žádný příkazový řádek, spustí wsl.exe výchozí prostředí.
+    If no command line is provided, wsl.exe launches the default shell.
 
     --exec, -e &lt;CommandLine&gt;
-        Spustí zadaný příkaz bez použití výchozího linuxového prostředí.
+        Execute the specified command without using the default Linux shell.
 
     --shell-type &lt;standard|login|none&gt;
-        Spustí zadaný příkaz se zadaným typem prostředí.
+        Execute the specified command with the provided shell type.
 
     --
-        Předá zbývající příkazový řádek tak, jak je.
+        Pass the remaining command line as-is.
 
-Možnosti:
+Options:
     --cd &lt;Directory&gt;
-        Nastaví zadaný adresář jako aktuální pracovní adresář.
-        Pokud se použije ~, použije se domovská cesta uživatele Linuxu. Pokud cesta začíná
-        znakem /, bude interpretována jako absolutní cesta Linuxu.
-        V opačném případě musí být hodnota absolutní cestou systému Windows.
+        Sets the specified directory as the current working directory.
+        If ~ is used the Linux user's home path will be used. If the path begins
+        with a / character, it will be interpreted as an absolute Linux path.
+        Otherwise, the value must be an absolute Windows path.
 
     --distribution, -d &lt;DistroName&gt;
-        Spustí zadanou distribuci.
+        Run the specified distribution.
 
     --distribution-id &lt;DistroGuid&gt;
-        Spustí ID zadané distribuce.
+        Run the specified distribution ID.
 
     --user, -u &lt;UserName&gt;
-        Spustí jako zadaný uživatel.
+        Run as the specified user.
 
     --system
-        Spustí prostředí pro distribuci systému.
+        Launches a shell for the system distribution.
 
-Argumenty pro správu Subsystému Windows pro Linux:
+Arguments for managing Windows Subsystem for Linux:
 
     --help
-        Zobrazí informace o použití.
+        Display usage information.
 
     --debug-shell
-        Otevře prostředí ladění WSL2 pro diagnostické účely.
+        Open a WSL2 debug shell for diagnostics purposes.
 
     --install [Distro] [Options...]
-        Nainstaluje distribuci Subsystému Windows pro Linux.
-        Seznam platných distribucí zobrazíte pomocí příkazu 'wsl.exe --list --online'.
+        Install a Windows Subsystem for Linux distribution.
+        For a list of valid distributions, use 'wsl.exe --list --online'.
 
-        Možnosti:
+        Options:
             --enable-wsl1
-                Povolí podporu WSL1.
+                Enable WSL1 support.
 
             --fixed-vhd
-                Vytvořte disk s pevnou velikostí pro uložení distribuce.
+                Create a fixed-size disk to store the distribution.
 
             --from-file &lt;Path&gt;
-                Nainstaluje distribuci z místního souboru.
+                Install a distribution from a local file.
 
             --legacy
-                Použije starší verzi manifestu distribuce.
+                Use the legacy distribution manifest.
 
             --location &lt;Location&gt;
-                Nastaví instalační cestu pro distribuci.
+                Set the install path for the distribution.
 
             --name &lt;Name&gt;
-                Nastaví název distribuce.
+                Set the name of the distribution.
 
             --no-distribution
-                Nainstaluje pouze požadované volitelné součásti, nenainstaluje distribuci.
+                Only install the required optional components, does not install a distribution.
 
             --no-launch, -n
-                Po instalaci nespustí distribuci.
+                Do not launch the distribution after install.
 
             --version &lt;Version&gt;
-                Určuje verzi, která se má použít pro novou distribuci.
+                Specifies the version to use for the new distribution.
 
             --vhd-size &lt;MemoryString&gt;
-                Určuje velikost disku pro uložení distribuce.
+                Specifies the size of the disk to store the distribution.
 
             --web-download
-                Stáhne distribuci z internetu namísto z Microsoft Storu.
+                Download the distribution from the internet instead of the Microsoft Store.
 
     --manage &lt;Distro&gt; &lt;Options...&gt;
-        Změní specifické možnosti distribuce.
+        Changes distro specific options.
 
-        Možnosti:
+        Options:
             --move &lt;Location&gt;
-                Přesuňte distribuci do nového umístění.
+                Move the distribution to a new location.
 
             --set-sparse, -s &lt;true|false&gt;
-                Nastavte virtuální pevný disk distribuce na zhuštěný, což umožní automatické uvolnění místa na disku.
+                Set the VHD of distro to be sparse, allowing disk space to be automatically reclaimed.
 
             --set-default-user &lt;Username&gt;
-                Nastaví výchozího uživatele distribuce.
+                Set the default user of the distribution.
 
             --resize &lt;MemoryString&gt;
-                Změní velikost disku distribuce na zadanou velikost.
+                Resize the disk of the distribution to the specified size.
 
     --mount &lt;Disk&gt;
-        Propojí a připojí fyzický nebo virtuální disk ve všech distribucích WSL 2.
+        Attaches and mounts a physical or virtual disk in all WSL 2 distributions.
 
-        Možnosti:
+        Options:
             --vhd
-                Určuje, že &lt;Disk&gt; odkazuje na virtuální pevný disk.
+                Specifies that &lt;Disk&gt; refers to a virtual hard disk.
 
             --bare
-                Propojí disk s WSL2, ale nepřipojí ho.
+                Attach the disk to WSL2, but don't mount it.
 
             --name &lt;Name&gt;
-                Připojí disk pomocí vlastního názvu přípojného bodu.
+                Mount the disk using a custom name for the mountpoint.
 
             --type &lt;Type&gt;
-                Systém souborů, který se má použít při připojování disku. Pokud není zadaný, výchozí hodnota je ext4.
+                Filesystem to use when mounting a disk, if not specified defaults to ext4.
 
             --options &lt;Options&gt;
-                Další možnosti připojení.
+                Additional mount options.
 
             --partition &lt;Index&gt;
-                Index oddílu, který se má připojit. Pokud není zadaný, výchozí hodnota je celý disk.
+                Index of the partition to mount, if not specified defaults to the whole disk.
 
     --set-default-version &lt;Version&gt;
-        Změní výchozí verzi instalace pro nové distribuce.
+        Changes the default install version for new distributions.
 
     --shutdown
-        Okamžitě ukončí všechny spuštěné distribuce a
-        odlehčený užitkový virtuální počítač WSL 2.
+        Immediately terminates all running distributions and the WSL 2
+        lightweight utility virtual machine.
 
-        Možnosti:
+        Options:
             --force
-                Ukončí virtuální stroj WSL 2, i když probíhá operace. Může způsobit ztrátu dat.
+                Terminate the WSL 2 virtual machine even if an operation is in progress. Can cause data loss.
 
     --status
-        Zobrazí stav Subsystému Windows pro Linux.
+        Show the status of Windows Subsystem for Linux.
 
     --unmount [Disk]
-        Odpojí disk a zruší jeho propojení u všech distribucí WSL2.
-        Pokud proběhlo volání bez argumentu, odpojí se všechny disky a zruší se jejich propojení.
+        Unmounts and detaches a disk from all WSL2 distributions.
+        Unmounts and detaches all disks if called without argument.
 
     --uninstall
-        Odinstaluje balíček Subsystému Windows pro Linux z tohoto počítače.
+        Uninstalls the Windows Subsystem for Linux package from this machine.
 
     --update
-        Aktualizuje balíček Subsystému Windows pro Linux.
+        Update the Windows Subsystem for Linux package.
 
-        Možnosti:
+        Options:
             --pre-release
-                Stáhne předběžnou verzi, pokud je k dispozici.
+                Download a pre-release version if available.
 
     --version, -v
-        Zobrazí informace o verzi.
+        Display version information.
 
-Argumenty pro správu distribucí v Subsystému Windows pro Linux:
+Arguments for managing distributions in Windows Subsystem for Linux:
 
     --export &lt;Distro&gt; &lt;FileName&gt; [Options]
-        Exportuje distribuci do souboru tar.
-        Název souboru může být - pro stdout.
+        Exports the distribution to a tar file.
+        The filename can be - for stdout.
 
-        Možnosti:
+        Options:
             --format &lt;Format&gt;
-                Určuje formát exportu. Podporované hodnoty: tar, tar.gz, vhd.
+                Specifies the export format. Supported values: tar, tar.gz, tar.xz, vhd.
 
     --import &lt;Distro&gt; &lt;InstallLocation&gt; &lt;FileName&gt; [Options]
-        Importuje zadaný soubor tar jako novou distribuci.
-        Název souboru může být - pro stdin.
+        Imports the specified tar file as a new distribution.
+        The filename can be - for stdin.
 
-        Možnosti:
+        Options:
             --version &lt;Version&gt;
-                Určuje verzi, která se má použít pro novou distribuci.
+                Specifies the version to use for the new distribution.
 
             --vhd
-                Určuje, že poskytnutý soubor je soubor .vhd nebo .vhdx, nikoli soubor tar.
-                Tato operace vytvoří kopii souboru VHD v zadaném umístění instalace.
+                Specifies that the provided file is a .vhd or .vhdx file, not a tar file.
+                This operation makes a copy of the VHD file at the specified install location.
 
     --import-in-place &lt;Distro&gt; &lt;FileName&gt;
-        Importuje zadaný soubor .VHD jako novou distribuci.
-        Tento virtuální pevný disk musí být naformátovaný typem systému souborů ext4.
+        Imports the specified VHD file as a new distribution.
+        This virtual hard disk must be formatted with the ext4 filesystem type.
 
     --list, -l [Options]
-        Vypíše distribuce.
+        Lists distributions.
 
-        Možnosti:
+        Options:
             --all
-                Vypíše všechny distribuce, včetně distribucí, které se
-                právě instalují nebo odinstalovávají.
+                List all distributions, including distributions that are
+                currently being installed or uninstalled.
 
             --running
-                Vypíše pouze distribuce, které jsou aktuálně spuštěné.
+                List only distributions that are currently running.
 
             --quiet, -q
-                Zobrazí pouze názvy distribucí.
+                Only show distribution names.
 
             --verbose, -v
-                Zobrazí podrobné informace o všech distribucích.
+                Show detailed information about all distributions.
 
             --online, -o
-                Zobrazí seznam dostupných distribucí pro instalaci pomocí 'wsl.exe --install'.
+                Displays a list of available distributions for install with 'wsl.exe --install'.
 
     --set-default, -s &lt;Distro&gt;
-        Nastaví distribuci jako výchozí.
+        Sets the distribution as the default.
 
     --set-version &lt;Distro&gt; &lt;Version&gt;
-        Změní verzi zadané distribuce.
+        Changes the version of the specified distribution.
 
     --terminate, -t &lt;Distro&gt;
-        Ukončí zadanou distribuci.
+        Terminates the specified distribution.
 
     --unregister &lt;Distro&gt;
-        Zruší registraci distribuce a odstraní kořenový systém souborů.</value>
+        Unregisters the distribution and deletes the root filesystem.</value>
   <comment>{Locked="--exec,"}{Locked="--shell-type "}{Locked="--cd "}{Locked="--distribution,"}{Locked="--distribution-id "}{Locked="--user,"}{Locked="--system
 "}{Locked="--help
 "}{Locked="--debug-shell
@@ -605,7 +622,7 @@ Argumenty pro správu distribucí v Subsystému Windows pro Linux:
 "}{Locked="--version,"}{Locked="--export "}{Locked="--format "}{Locked="--import "}{Locked="--version "}{Locked="--vhd
 "}{Locked="--import-in-place "}{Locked="--list,"}{Locked="--all
 "}{Locked="--running
-"}{Locked="--quiet,"}{Locked="--verbose,"}{Locked="--online,"}{Locked="--install'"}{Locked="--set-default,"}{Locked="--set-version "}{Locked="--terminate,"}{Locked="--unregister "}Command line arguments, file names and string inserts should not be translated</comment>
+"}{Locked="--quiet,"}{Locked="--verbose,"}{Locked="--online,"}{Locked="--install'"}{Locked="--set-default,"}{Locked="--set-version "}{Locked="--terminate,"}{Locked="--unregister "}Command line arguments, file names and string inserts should not be translated. {Locked="tar"}"tar" is a file archive format name and should not be translated. {Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used. "sparse" is a technical storage term meaning the file only uses disk space for written data. Use the technical term in your locale.</comment>
   </data>
   <data name="MessagePackageVersions" xml:space="preserve">
     <value>Verze WSL: {}
@@ -629,7 +646,7 @@ Potvrzení změn: {}
   </data>
   <data name="MessageCustomKernelModulesNotFound" xml:space="preserve">
     <value>VHD vlastních modulů jádra v {} se nenašel: {}.</value>
-    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated. {Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="MessageCustomSystemDistroError" xml:space="preserve">
     <value>Vlastní distribuce systému zadaná v {} nebyla nalezena nebo nemá správný formát.</value>
@@ -690,7 +707,7 @@ Argumenty:
   </data>
   <data name="MessageWslMountNotSupportedOnArm" xml:space="preserve">
     <value>wsl.exe --mount na arm64 vyžaduje Windows verze 27653 nebo novější.</value>
-    <comment>{Locked="--mount "}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{Locked="--mount "}Command line arguments, file names and string inserts should not be translated. "mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageUpdateNotNeeded" xml:space="preserve">
     <value>Už máte nainstalovanou nejnovější verzi Subsystému Windows pro Linux.</value>
@@ -722,7 +739,7 @@ Může být nutné restartovat systém, aby se změny projevily.</value>
     <value>Přemostění sítě vyžaduje nastavení přepínače wsl2.vmSwitch.</value>
   </data>
   <data name="MessageCouldFetchDistributionList" xml:space="preserve">
-    <value>Nepovedlo se načíst distribuci seznamu z '{}'. {}</value>
+    <value>Nepovedlo se načíst distribuční seznam z {}. {}</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageFailedToAttachDisk" xml:space="preserve">
@@ -743,6 +760,11 @@ Informace najdete na https://aka.ms/wslinstall</value>
   </data>
   <data name="MessageAdministratorAccessRequiredForDebugShell" xml:space="preserve">
     <value>Spuštění ladicího prostředí vyžaduje spuštění wsl.exe jako správce.</value>
+  </data>
+  <data name="MessageAdminProtectionEnabled" xml:space="preserve">
+    <value>Windows Admin Protection je povolená a vaše distribuce se můžou zaregistrovat pod jiným účtem.
+Další informace o Admin Protection najdete na https://aka.ms/apdevguide</value>
+    <comment>{Locked="Windows Admin Protection"}{Locked="Admin Protection"}{Locked="https://aka.ms/apdevguide"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageInstallProcessFailed" xml:space="preserve">
     <value>Proces instalace pro distribuci '{}' selhal s ukončovacím kódem: {}.</value>
@@ -803,7 +825,7 @@ Informace najdete na https://aka.ms/wslinstall</value>
     <value>Otevřít EventViewer</value>
   </data>
   <data name="MessageDistributionNameNeeded" xml:space="preserve">
-    <value>Tato distribuce neobsahuje výchozí název. Pokud chcete zvolit název distribuce, použijte --name .</value>
+    <value>This distribution doesn't contain a default name. Use --name to choose the distribution name.</value>
     <comment>{Locked="--name "}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageArgumentsNotValidTogether" xml:space="preserve">
@@ -820,6 +842,7 @@ Informace najdete na https://aka.ms/wslinstall</value>
   </data>
   <data name="MessageUsingLegacyDistribution" xml:space="preserve">
     <value>Používá se starší verze registrace distribuce. Zvažte místo toho použití distribuce založené na formátu tar.</value>
+    <comment>{Locked="tar"}"tar" is a file archive format name and should not be translated.</comment>
   </data>
   <data name="MessageLegacyDistributionVersionArgNotSupported" xml:space="preserve">
     <value>Starší registrace distribuce nepodporují argument --version .</value>
@@ -851,6 +874,10 @@ Informace najdete na https://aka.ms/wslinstall</value>
   </data>
   <data name="MessagedFailedToCreateSwapVhd" xml:space="preserve">
     <value>Nepovedlo se vytvořit prohození disku v '{}': {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated. "swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
+  </data>
+  <data name="MessageFailedToCreateDisk" xml:space="preserve">
+    <value>Nepovedlo se vytvořit disk {}: {}</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageNestedVirtualizationNotSupported" xml:space="preserve">
@@ -866,6 +893,7 @@ Informace najdete na https://aka.ms/wslinstall</value>
   </data>
   <data name="MessageSafeModeEnabled" xml:space="preserve">
     <value>NOUZOVÝ REŽIM POVOLEN – mnoho funkcí bude zakázáno.</value>
+    <comment>"safe mode" refers to a minimal/diagnostic startup mode. Use the standard OS term for safe mode in your locale.</comment>
   </data>
   <data name="MessageMirroredNetworkingNotSupportedReason" xml:space="preserve">
     <value>Zrcadlený síťový režim není podporován: {}.
@@ -879,29 +907,39 @@ Návrat k sítím NAT.</value>
     <value>Verze Systému Windows {}. {} nemá požadované funkce.</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
+  <data name="MessageMirroredNetworkingNotSupportedIpv6Disabled" xml:space="preserve">
+    <value>Protokol IPv6 je na hostiteli zakázán nepodporovaným způsobem (HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters DisabledComponents=0xff)</value>
+    <comment>{Locked="HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"}{Locked="DisabledComponents"}{Locked="0xff"}</comment>
+  </data>
   <data name="MessageHyperVFirewallNotSupported" xml:space="preserve">
     <value>Brána firewall technologie Hyper-V není podporována.</value>
   </data>
   <data name="MessageDnsTunnelingNotSupported" xml:space="preserve">
     <value>Tunelování DNS není podporováno.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="MessageLocalhostForwardingNotSupportedMirroredMode" xml:space="preserve">
     <value>Nastavení wsl2.localhostForwarding nemá žádný vliv při použití zrcadleného síťového režimu</value>
   </data>
   <data name="MessageHttpProxyChangeDetected" xml:space="preserve">
     <value>Na hostiteli byla zjištěna změna proxy serveru HTTP. Restartujte WSL, aby se změna použila.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="MessageProxyLocalhostSettingsDropped" xml:space="preserve">
     <value>Byla zjištěna konfigurace proxy serveru localhost, ale nebyla zrcadlena do WSL. WSL v režimu NAT nepodporuje proxy localhost.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="MessageProxyV6SettingsDropped" xml:space="preserve">
     <value>Byla zjištěna konfigurace proxy serveru IPv6, ale nebyla zrcadlena do WSL. WSL v režimu NAT nepodporuje protokol IPv6.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="MessageProxyLoopbackV6SettingsDropped" xml:space="preserve">
     <value>Byla zjištěna konfigurace proxy serveru IPv6 místního hostitele, ale nebyla zrcadlena do WSL. WSL nepodporuje proxy localhost IPv6.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="MessageProxyUnexpectedSettingsDropped" xml:space="preserve">
     <value>Při pokusu o překlad nastavení proxy serveru došlo k neočekávané chybě. Nastavení proxy serveru nebylo zrcadleno do WSL.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="MessageRegistryError" xml:space="preserve">
     <value>Při přístupu k registru došlo k chybě. Cesta: '{}'. Chyba: {}</value>
@@ -944,7 +982,7 @@ Návrat k sítím NAT.</value>
   </data>
   <data name="MessageWSLMountDisabled" xml:space="preserve">
     <value>wsl.exe --mount je zakázáno zásadami počítače.</value>
-    <comment>{Locked="--mount "}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{Locked="--mount "}Command line arguments, file names and string inserts should not be translated. "mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageWSL1Disabled" xml:space="preserve">
     <value>Protokol WSL1 je zakázán zásadami počítače.</value>
@@ -958,6 +996,10 @@ Návrat k sítím NAT.</value>
   </data>
   <data name="MessageUpdateFailed" xml:space="preserve">
     <value>Aktualizace se nezdařila (ukončovací kód: {}).</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageUninstallNoArguments" xml:space="preserve">
+    <value>{} nepřijímá žádné argumenty. Pokud chcete zrušit registraci distribuce, použijte místo toho {}.</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageUninstallFailed" xml:space="preserve">
@@ -1003,7 +1045,7 @@ Návrat k sítím NAT.</value>
   </data>
   <data name="MessageVhdInUse" xml:space="preserve">
     <value>Operaci nešlo dokončit, protože se VHD právě používá. Vynucení ukončení používání WSL: wsl.exe --shutdown</value>
-    <comment>{Locked="--shutdown"}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{Locked="--shutdown"}Command line arguments, file names and string inserts should not be translated. {Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="MessageInvalidBoolean" xml:space="preserve">
     <value>{} není platná logická hodnota, &lt;true|false&gt;</value>
@@ -1011,6 +1053,7 @@ Návrat k sítím NAT.</value>
   </data>
   <data name="MessageSparseVhdWsl2Only" xml:space="preserve">
     <value>Zhuštěný VHD je podporován pouze pro WSL2.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "sparse" is a technical storage term meaning the file only uses disk space for written data. Use the technical term in your locale.</comment>
   </data>
   <data name="MessageLocalSystemNotSupported" xml:space="preserve">
     <value>Spouštění WSL jako místního systému se nepodporuje.</value>
@@ -1055,12 +1098,12 @@ Návrat k sítím NAT.</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageCorruptedDistroRegistration" xml:space="preserve">
-    <value>Nepodařilo se přečíst vlastnost '{}' z distribuce {} </value>
+    <value>Nepodařilo se přečíst vlastnost {} z distribuce {}</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessagePassVhdFlag" xml:space="preserve">
-    <value>Vypadá to jako soubor VHD. K importu virtuálního pevného disku místo tar použijte --vhd </value>
-    <comment>{Locked="--vhd "}Command line arguments, file names and string inserts should not be translated</comment>
+    <value>This looks like a VHD file. Use --vhd to import a VHD instead of a tar.</value>
+    <comment>{Locked="--vhd "}Command line arguments, file names and string inserts should not be translated. {Locked="tar"}"tar" is a file archive format name and should not be translated. {Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="MessageDistroStoreInstallFailed" xml:space="preserve">
     <value>Nepovedlo se nainstalovat {} z Microsoft Store: {}
@@ -1108,23 +1151,26 @@ Kód chyby: {}</value>
   </data>
   <data name="MessageDnsTunnelingDisabled" xml:space="preserve">
     <value>Kvůli aktuálnímu problému s kompatibilitou s klientem globálního bezpečného přístupu je tunelování DNS zakázané.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="MessageSparseVhdDisabled" xml:space="preserve">
     <value>Podpora prořídlého VHD je v současné době zakázána z důvodu možného poškození dat.
 Pokud chcete distribuci vynutit použití prořídlého VHD, spusťte:
 wsl.exe --manage &lt;DistributionName&gt; --set-sparse true --allow-unsafe</value>
-    <comment>{Locked="--manage "}{Locked="--set-sparse "}{Locked="--allow-unsafe"}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{Locked="--manage "}{Locked="--set-sparse "}{Locked="--allow-unsafe"}Command line arguments, file names and string inserts should not be translated. {Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "sparse" is a technical storage term meaning the file only uses disk space for written data. Use the technical term in your locale.</comment>
   </data>
   <data name="MessageDrvfsMountFailed" xml:space="preserve">
     <value>Nepovedlo se připojit {}. Další podrobnosti najdete v dmesg.</value>
-    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated. "mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageFstabMountFailed" xml:space="preserve">
     <value>Zpracování /etc/fstab s připojením -a se nezdařilo.</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageReadOnlyDistro" xml:space="preserve">
     <value>Při připojování distribučního disku došlo k chybě. Jako náhradní disk byl připojen jen pro čtení.
 Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="MessageFailedToTranslate" xml:space="preserve">
     <value>Překlad '{}' se nezdařil</value>
@@ -1163,28 +1209,35 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
   </data>
   <data name="Settings_AutoProxy.Header" xml:space="preserve">
     <value>Automatický proxy server povolen</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_AutoProxy.Description" xml:space="preserve">
     <value>Povoluje WSL používat informace o proxy serveru HTTP systému Windows.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_AutoProxyToggleSwitch.AutomationProperties.Name" xml:space="preserve">
     <value>Automatický proxy server povolen.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_AutoProxyToggleSwitch.AutomationProperties.HelpText" xml:space="preserve">
     <value>Povoluje WSL používat informace o proxy serveru HTTP systému Windows.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_BestEffortDNS.Header" xml:space="preserve">
     <value>Využití analýzy DNS s maximálním úsilím</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_BestEffortDNS.Description" xml:space="preserve">
     <value>Lze použít pouze v případě, že je vlastnost wsl2.dnsTunneling nastavena na hodnotu true. Pokud je tato hodnota nastavená na true, systém Windows extrahuje otázku z požadavku DNS a pokusí se ji vyřešit a ignoruje neznámé záznamy.</value>
-    <comment>{Locked="wsl2.dnsTunneling"}.wslconfig property key names should not be translated</comment>
+    <comment>{Locked="wsl2.dnsTunneling"}{Locked="DNS"}.wslconfig property key names should not be translated. "DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_BestEffortDNSToggleSwitch.AutomationProperties.Name" xml:space="preserve">
     <value>Využijte parsování DNS s maximálním úsilím.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_BestEffortDNSToggleSwitch.AutomationProperties.HelpText" xml:space="preserve">
     <value>Lze použít pouze v případě, že je vlastnost wsl2.dnsTunneling nastavena na hodnotu true. Pokud je tato hodnota nastavená na true, systém Windows extrahuje otázku z požadavku DNS a pokusí se ji vyřešit a ignoruje neznámé záznamy.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_CustomKernelPath.Header" xml:space="preserve">
     <value>Vlastní jádro</value>
@@ -1206,6 +1259,7 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
   </data>
   <data name="Settings_CustomKernelModulesPath.Description" xml:space="preserve">
     <value>Absolutní cesta Windows k vlastním modulům jádra VHD Linuxu.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_CustomKernelModulesPathBrowseButton.Content" xml:space="preserve">
     <value>Procházet moduly jádra</value>
@@ -1215,6 +1269,7 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
   </data>
   <data name="Settings_CustomKernelModulesPathTextBox.AutomationProperties.HelpText" xml:space="preserve">
     <value>Absolutní cesta Windows k vlastním modulům jádra VHD Linuxu.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_CustomSystemDistroPath.Header" xml:space="preserve">
     <value>Vlastní distribuce systému</value>
@@ -1223,8 +1278,8 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
     <value>Procházet distribuce</value>
   </data>
   <data name="Settings_CustomSystemDistroPathDescription.Text" xml:space="preserve">
-    <value>Určete cestu k virtuálnímu pevnému disku, který se načte jako vlastní distribuce systému a primárně se použije používá k napájení aplikací s grafickým uživatelským rozhraním ve WSL. [Další informace o distribucích systému najdete tady].</value>
-    <comment>{Locked="["}{Locked="]"}The text in between the delimiters [ ] is made into a hyperlink in code, and the delimiters are removed</comment>
+    <value>Specify a path to a VHD which will load as a custom system distro, primarily used to power GUI apps in WSL. [Learn more about system distros here].</value>
+    <comment>{Locked="["}{Locked="]"}{Locked="VHD"}The text in between the delimiters [ ] is made into a hyperlink in code, and the delimiters are removed. "VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_CustomSystemDistroPathDescription.NavigateUri" xml:space="preserve">
     <value>https://aka.ms/wslgsystemdistro</value>
@@ -1234,7 +1289,8 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
     <value>Vlastní distribuce systému</value>
   </data>
   <data name="Settings_CustomSystemDistroPathTextBox.AutomationProperties.HelpText" xml:space="preserve">
-    <value>Určete cestu k virtuálnímu pevnému disku, který se načte jako vlastní distribuce systému a primárně se použije používá k napájení aplikací s grafickým uživatelským rozhraním ve WSL.</value>
+    <value>Specify a path to a VHD which will load as a custom system distro, primarily used to power GUI apps in WSL.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_DebugConsole.Header" xml:space="preserve">
     <value>Povolit konzolu ladění</value>
@@ -1249,19 +1305,23 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
     <value>Logická hodnota pro zapnutí okna výstupní konzoly, které zobrazuje obsah diagnostických zpráv při spuštění instance distribuce WSL 2</value>
   </data>
   <data name="Settings_DefaultVHDSize.Header" xml:space="preserve">
-    <value>Výchozí velikost virtuálního pevného disku</value>
+    <value>Default VHD Size</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_DefaultVHDSize.Description" xml:space="preserve">
     <value>Výchozí maximální velikost rozšiřitelného virtuálního pevného disku (VHD) WSL pouze pro nově vytvořené distribuce</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_DefaultVHDSizeResetButton.Content" xml:space="preserve">
     <value>Resetovat velikost</value>
   </data>
   <data name="Settings_DefaultVHDSizeTextBox.AutomationProperties.Name" xml:space="preserve">
-    <value>Výchozí velikost virtuálního pevného disku</value>
+    <value>Default VHD Size</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_DefaultVHDSizeTextBox.AutomationProperties.HelpText" xml:space="preserve">
     <value>Výchozí maximální velikost zadaná v megabajtech pro rozšiřitelný virtuální pevný disk WSL (VHD) pouze pro nově vytvořené distribuce.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated.</comment>
   </data>
   <data name="Settings_DeveloperPageTitle.Text" xml:space="preserve">
     <value>Vývojář</value>
@@ -1281,28 +1341,35 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
   </data>
   <data name="Settings_DNSProxy.Header" xml:space="preserve">
     <value>Proxy server DNS je povolený</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated. "proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_DNSProxy.Description" xml:space="preserve">
     <value>Lze použít pouze v případě, že je vlastnost wsl2.networkingMode nastavena na hodnotu NAT. Logická hodnota pro informování WSL o konfiguraci serveru DNS v Linuxu na překlad adres (NAT) na hostiteli. Nastavení na false bude zrcadlit servery DNS z Windows do Linuxu.</value>
-    <comment>{Locked="wsl2.networkingMode"}.wslconfig property key names should not be translated</comment>
+    <comment>{Locked="wsl2.networkingMode"}{Locked="DNS"}.wslconfig property key names should not be translated. "DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_DNSProxyToggleSwitch.AutomationProperties.Name" xml:space="preserve">
     <value>Proxy server DNS je povolený.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated. "proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_DNSProxyToggleSwitch.AutomationProperties.HelpText" xml:space="preserve">
     <value>Lze použít pouze v případě, že je vlastnost wsl2.networkingMode nastavena na hodnotu NAT. Logická hodnota pro informování WSL o konfiguraci serveru DNS v Linuxu na překlad adres (NAT) na hostiteli. Nastavení na false bude zrcadlit servery DNS z Windows do Linuxu.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_DNSTunneling.Header" xml:space="preserve">
     <value>Tunelování DNS povoleno</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_DNSTunneling.Description" xml:space="preserve">
     <value>Změní způsob, jakým jsou požadavky DNS proxy z WSL na Windows.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_DNSTunnelingToggleSwitch.AutomationProperties.Name" xml:space="preserve">
     <value>Tunelování DNS povoleno.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_DNSTunnelingToggleSwitch.AutomationProperties.HelpText" xml:space="preserve">
     <value>Změní způsob, jakým jsou požadavky DNS proxy z WSL na Windows.</value>
+    <comment>{Locked="DNS"}"DNS" (Domain Name System) should not be translated.</comment>
   </data>
   <data name="Settings_FileSystemPageTitle.Text" xml:space="preserve">
     <value>Systém souborů</value>
@@ -1378,19 +1445,22 @@ Zobrazit pokyny pro obnovení: https://aka.ms/wsldiskmountrecovery</value>
   </data>
   <data name="Settings_InitialAutoProxyTimeout.Header" xml:space="preserve">
     <value>Časový limit počátečního automatického proxy serveru</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_InitialAutoProxyTimeout.Description" xml:space="preserve">
     <value>Lze použít pouze v případě, že je vlastnost wsl2.autoProxy nastavena na hodnotu true. Konfiguruje, jak dlouho (v milisekundách) WSL počká na načtení informací o proxy serveru HTTP při spuštění kontejneru WSL. Pokud se nastavení proxy serveru po této době vyřeší, musí se instance WSL restartovat, aby se použila načtená nastavení proxy serveru.</value>
-    <comment>{Locked="wsl2.autoProxy"}.wslconfig property key names should not be translated</comment>
+    <comment>{Locked="wsl2.autoProxy"}.wslconfig property key names should not be translated. "proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_InitialAutoProxyTimeoutResetButton.Content" xml:space="preserve">
     <value>Resetovat časový limit</value>
   </data>
   <data name="Settings_InitialAutoProxyTimeoutTextBox.AutomationProperties.Name" xml:space="preserve">
     <value>Časový limit počátečního automatického proxy serveru</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_InitialAutoProxyTimeoutTextBox.AutomationProperties.HelpText" xml:space="preserve">
     <value>Lze použít pouze v případě, že je vlastnost wsl2.autoProxy nastavena na hodnotu true. Konfiguruje, jak dlouho (v milisekundách) WSL počká na načtení informací o proxy serveru HTTP při spuštění kontejneru WSL. Pokud se nastavení proxy serveru po této době vyřeší, musí se instance WSL restartovat, aby se použila načtená nastavení proxy serveru.</value>
+    <comment>"proxy" refers to a network proxy server. Use the standard networking term in your locale.</comment>
   </data>
   <data name="Settings_KernelCommandLine.Header" xml:space="preserve">
     <value>Příkazový řádek jádra</value>
@@ -1566,6 +1636,7 @@ Mezi výhody používání aplikace Docker Desktop s WSL patří:
 • Příkazy Dockeru můžete spouštět ve WSL nebo Windows pomocí stejného démona a imagí Dockeru.
 • Soubory a složky můžete bez problémů sdílet mezi Windows a Linuxem pomocí automatického připojení jednotek Windows ve WSL.
 • Díky interoperabilitě WSL můžete pomocí preferovaných nástrojů a editorů Windows pracovat na linuxovém kódu a souborech a naopak.</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
  </data>
   <data name="Settings_OOBEDockerDesktopIntegration.Title" xml:space="preserve">
     <value>Integrace aplikace Docker Desktop</value>
@@ -1733,15 +1804,19 @@ K dalším možnostem VS Code Remote můžete přistupovat také prostřednictv�
   </data>
   <data name="Settings_SafeMode.Header" xml:space="preserve">
     <value>Povolit nouzový režim</value>
+    <comment>"safe mode" refers to a minimal/diagnostic startup mode. Use the standard OS term for safe mode in your locale.</comment>
   </data>
   <data name="Settings_SafeMode.Description" xml:space="preserve">
     <value>Spusťte WSL v nouzovém režimu, který zakáže mnoho funkcí a je určen k obnovení distribucí, které jsou ve špatném stavu.</value>
+    <comment>"safe mode" refers to a minimal/diagnostic startup mode. Use the standard OS term for safe mode in your locale.</comment>
   </data>
   <data name="Settings_SafeModeToggleSwitch.AutomationProperties.Name" xml:space="preserve">
     <value>Povolte nouzový režim.</value>
+    <comment>"safe mode" refers to a minimal/diagnostic startup mode. Use the standard OS term for safe mode in your locale.</comment>
   </data>
   <data name="Settings_SafeModeToggleSwitch.AutomationProperties.HelpText" xml:space="preserve">
     <value>Spusťte WSL v nouzovém režimu, který zakáže mnoho funkcí a je určen k obnovení distribucí, které jsou ve špatném stavu.</value>
+    <comment>"safe mode" refers to a minimal/diagnostic startup mode. Use the standard OS term for safe mode in your locale.</comment>
   </data>
   <data name="Settings_Shell_About.Content" xml:space="preserve">
     <value>O modulu snap-in</value>
@@ -1805,46 +1880,59 @@ K dalším možnostem VS Code Remote můžete přistupovat také prostřednictv�
     <comment>{Locked}Uri to Microsoft WSL issues</comment>
   </data>
   <data name="Settings_SparseVHD.Header" xml:space="preserve">
-    <value>Ve výchozím nastavení povolit zhuštěný virtuální pevný disk</value>
+    <value>Enable sparse VHD by default</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "sparse" is a technical storage term meaning the file only uses disk space for written data. Use the technical term in your locale.</comment>
   </data>
   <data name="Settings_SparseVHD.Description" xml:space="preserve">
-    <value>Všechny nově vytvořené virtuální pevné disky budou při povolení automaticky nastaveny na zhuštěné.</value>
+    <value>Any newly created VHD will be set to sparse automatically when enabled.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "sparse" is a technical storage term meaning the file only uses disk space for written data. Use the technical term in your locale.</comment>
   </data>
   <data name="Settings_SparseVHDToggleSwitch.AutomationProperties.Name" xml:space="preserve">
-    <value>Ve výchozím nastavení povolte zhuštěný virtuální pevný disk.</value>
+    <value>Enable sparse VHD by default.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "sparse" is a technical storage term meaning the file only uses disk space for written data. Use the technical term in your locale.</comment>
   </data>
   <data name="Settings_SparseVHDToggleSwitch.AutomationProperties.HelpText" xml:space="preserve">
-    <value>Všechny nově vytvořené virtuální pevné disky budou při povolení automaticky nastaveny na zhuštěné.</value>
+    <value>Any newly created VHD will be set to sparse automatically when enabled.</value>
+    <comment>{Locked="VHD"}"VHD" (Virtual Hard Disk) is a technical format name and should not be translated. "sparse" is a technical storage term meaning the file only uses disk space for written data. Use the technical term in your locale.</comment>
   </data>
   <data name="Settings_SwapFilePath.Header" xml:space="preserve">
     <value>Prohození umístění souboru</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapFilePath.Description" xml:space="preserve">
     <value>Absolutní cesta systému Windows k prohození virtuálního pevného disku.</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapFilePathBrowseButton.Content" xml:space="preserve">
     <value>Procházet soubory prohození</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapFilePathTextBox.AutomationProperties.Name" xml:space="preserve">
     <value>Prohození umístění souboru</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapFilePathTextBox.AutomationProperties.HelpText" xml:space="preserve">
     <value>Absolutní cesta systému Windows k prohození virtuálního pevného disku.</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapSize.Header" xml:space="preserve">
     <value>Velikost prohození</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapSize.Description" xml:space="preserve">
     <value>Kolik místa prohození se má přidat do virtuálního počítače WSL 2, 0 pro žádný odkládací soubor. Prohození úložiště je disková paměť RAM, která se používá v případě, že poptávka po paměti překračuje limit hardwarového zařízení.</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapSizeResetButton.Content" xml:space="preserve">
     <value>Resetovat velikost</value>
   </data>
   <data name="Settings_SwapSizeTextBox.AutomationProperties.Name" xml:space="preserve">
     <value>Velikost prohození</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_SwapSizeTextBox.AutomationProperties.HelpText" xml:space="preserve">
     <value>Kolik místa prohození zadaného v megabajtech, které se má přidat do virtuálního počítače WSL 2 0 pro žádný odkládací soubor Stránkovací úložiště je paměť RAM založená na disku, která se používá v případě, že požadavky na paměť překračují limit hardwarového zařízení.</value>
+    <comment>"swap" refers to virtual memory swap space. This is a technical term; use the standard OS term in your locale or keep "swap".</comment>
   </data>
   <data name="Settings_Virtio.Header" xml:space="preserve">
     <value>Povolit VirtIO</value>
@@ -1857,6 +1945,7 @@ K dalším možnostem VS Code Remote můžete přistupovat také prostřednictv�
   </data>
   <data name="Settings_Virtio9p.Description" xml:space="preserve">
     <value>Povolí připojení systému souborů 9P z hostitele pomocí přenosu virtio.</value>
+    <comment>"mount" is a technical term meaning to make a disk/filesystem accessible. Use the standard technical term in your locale, or keep "mount" if commonly used.</comment>
   </data>
   <data name="Settings_VMIdleTimeout.Header" xml:space="preserve">
     <value>Časový limit nečinnosti virtuálního počítače</value>
@@ -1872,5 +1961,1019 @@ K dalším možnostem VS Code Remote můžete přistupovat také prostřednictv�
   </data>
   <data name="Settings_VMIdleTimeoutTextBox.AutomationProperties.HelpText" xml:space="preserve">
     <value>Počet milisekund, po které je virtuální počítač nečinný, než se vypne.</value>
+  </data>
+  <data name="Settings_ApplyChangesButton.Content" xml:space="preserve">
+    <value>Použít změny</value>
+  </data>
+  <data name="Settings_ApplyChangesDialogTitle" xml:space="preserve">
+    <value>Je potřeba vypnout WSL</value>
+  </data>
+  <data name="Settings_ApplyChangesDialogDescription" xml:space="preserve">
+    <value>Změny nastavení WSL vyžadují k dokončení vypnutí a restartování WSL. Po vypnutí se ukončí všechny aktivní relace WSL.</value>
+  </data>
+  <data name="Settings_ApplyChangesDialogShutdownButton" xml:space="preserve">
+    <value>Vypnout WSL teď</value>
+  </data>
+  <data name="Settings_ApplyChangesDialogLaterButton" xml:space="preserve">
+    <value>Později</value>
+  </data>
+  <data name="Settings_ApplyChangesDialogFailedTitle" xml:space="preserve">
+    <value>Nepovedlo se použít změny</value>
+  </data>
+  <data name="Settings_ApplyChangesDialogCloseButton" xml:space="preserve">
+    <value>Zavřít</value>
+  </data>
+  <data name="Settings_ApplyChangesDialogCommitFailed" xml:space="preserve">
+    <value>Nepovedlo se uložit čekající změny nastavení. Kód chyby: {0}</value>
+    <comment>{Locked="{0}"}Format placeholder for Win32 error code</comment>
+  </data>
+  <data name="Settings_ApplyChangesDialogShutdownFailed" xml:space="preserve">
+    <value>Nastavení se uložila, ale vypnutí WSL se nezdařilo: {0}</value>
+    <comment>{Locked="{0}"}Format placeholder for exception message</comment>
+  </data>
+  <data name="Settings_BooleanTrueText" xml:space="preserve">
+    <value>Zapnuto</value>
+  </data>
+  <data name="Settings_BooleanFalseText" xml:space="preserve">
+    <value>Vypnuto</value>
+  </data>
+  <data name="Settings_OOBEVSIntegration.Title" xml:space="preserve">
+    <value>Vytvářejte, spouštějte, laďte a profilujte své aplikace běžící na WSL z Visual Studia</value>
+  </data>
+  <data name="Settings_OOBEVSIntegration.Description" xml:space="preserve">
+    <value>Spouštějte a laďte své aplikace ve WSL z Visual Studia</value>
+  </data>
+  <data name="Settings_OOBEVSIntegration_VSForDotNetLink.Content" xml:space="preserve">
+    <value>Další informace o WSL ve Visual Studiu pro vývojáře .NET</value>
+  </data>
+  <data name="Settings_OOBEVSIntegration_VSForDotNetLink.NavigateUri" xml:space="preserve">
+    <value>https://learn.microsoft.com/visualstudio/debugger/debug-dotnet-core-in-wsl-2</value>
+    <comment>{locked}Uri should redirect to the correct locale for the browser</comment>
+  </data>
+  <data name="Settings_OOBEVSIntegration_VSForCppLink.Content" xml:space="preserve">
+    <value>Další informace o Visual Studiu a WSL pro vývojáře v C++</value>
+  </data>
+  <data name="Settings_OOBEVSIntegration_VSForCppLink.NavigateUri" xml:space="preserve">
+    <value>https://learn.microsoft.com/cpp/linux/?view=msvc-170</value>
+    <comment>{locked}Uri should redirect to the correct locale for the browser</comment>
+  </data>
+  <data name="Settings_OOBEVSIntegration_Description.Text" xml:space="preserve">
+    <value>Pomocí subsystému Windows pro Linux (WSL) můžete v Linuxu snadno spouštět a ladit své aplikace .NET Core a multiplatformní aplikace C++ přímo ve Visual Studiu, aniž byste museli opustit toto prostředí. Pokud jste multiplatformní vývojář, můžete tuto metodu využít jako jednoduchý způsob testování více cílových prostředí.</value>
+  </data>
+  <data name="Settings_OOBEVSIntegration_Title.Text" xml:space="preserve">
+    <value>Integrace Visual Studia</value>
+  </data>
+  <data name="Settings_Shell_VSIntegration.Content" xml:space="preserve">
+    <value>Integrace Visual Studia</value>
+  </data>
+  <data name="MessageWslcUsage" xml:space="preserve">
+    <value>wslc – WSL Container CLI
+Využití:
+  wslc --help</value>
+    <comment>{Locked="--help"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcSessionNotFound" xml:space="preserve">
+    <value>Relace nebyla nalezena: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageInvalidIp" xml:space="preserve">
+    <value>Neplatná IP adresa '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcOpenSessionFailed" xml:space="preserve">
+    <value>OpenSessionByName('{}') selhalo</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcNoSessionsFound" xml:space="preserve">
+    <value>Nebyly nalezeny žádné relace WSLC.</value>
+  </data>
+  <data name="MessageWslcSessionsFound" xml:space="preserve">
+    <value>Nalezeno {} relací WSLC{}:</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcTerminateSessionFailed" xml:space="preserve">
+    <value>Ukončení relace se nezdařilo: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcDefaultSessionNotFound" xml:space="preserve">
+    <value>Výchozí relace nebyla nalezena</value>
+  </data>
+  <data name="MessageWslcOpenDefaultSessionFailed" xml:space="preserve">
+    <value>Nepodařilo se otevřít výchozí relaci</value>
+  </data>
+  <data name="MessageWslcTerminateDefaultSessionFailed" xml:space="preserve">
+    <value>Nepodařilo se ukončit výchozí relaci</value>
+  </data>
+  <data name="MessageWslcShellExited" xml:space="preserve">
+    <value>{} byl ukončen s: {}</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcCreatedSession" xml:space="preserve">
+    <value>Vytvořená relace: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcHeaderId" xml:space="preserve">
+    <value>ID</value>
+  </data>
+  <data name="MessageWslcHeaderCreatorPid" xml:space="preserve">
+    <value>PID autora</value>
+  </data>
+  <data name="MessageWslcHeaderDisplayName" xml:space="preserve">
+    <value>Zobrazovaný název</value>
+  </data>
+  <data name="MessageWslcUnknownCommand" xml:space="preserve">
+    <value>Neznámý příkaz: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcCannotRemoveRunningContainer" xml:space="preserve">
+    <value>Kontejner {} je spuštěný a nedá se odebrat. Před odebráním buď zastavte kontejner, nebo použijte vynucené odebrání (-f).</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcContainerNotRunning" xml:space="preserve">
+    <value>Kontejner {} není spuštěný.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcContainerIsRunning" xml:space="preserve">
+    <value>Kontejner {} je spuštěný.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcContainerNotFound" xml:space="preserve">
+    <value>Kontejner {} se nenašel.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcContainerNetworkNameRequired" xml:space="preserve">
+    <value>Pro vlastní typ sítě se vyžaduje název sítě kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_UnrecognizedCommandError" xml:space="preserve">
+    <value>Nerozpoznaný příkaz: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_RequiredArgumentError" xml:space="preserve">
+    <value>Nebyl zadán požadovaný argument: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TooManyArgumentsError" xml:space="preserve">
+    <value>Argument byl zadán víckrát, než je povoleno: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_HelpArgDescription" xml:space="preserve">
+    <value>Zobrazí nápovědu k vybranému příkazu</value>
+  </data>
+  <data name="WSLCCLI_MultipleExclusiveArgumentsProvided" xml:space="preserve">
+    <value>Bylo poskytnuto několik vzájemně se vylučujících argumentů: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_DependencyArgumentMissing" xml:space="preserve">
+    <value>Argument {} se dá použít jenom s {}.</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_Usage" xml:space="preserve">
+    <value>Využití: {} {}</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_Command" xml:space="preserve">
+    <value>příkaz</value>
+  </data>
+  <data name="WSLCCLI_Options" xml:space="preserve">
+    <value>Možnosti</value>
+  </data>
+  <data name="WSLCCLI_AvailableCommandAliases" xml:space="preserve">
+    <value>K dispozici jsou následující aliasy příkazů:</value>
+  </data>
+  <data name="WSLCCLI_AvailableCommands" xml:space="preserve">
+    <value>K dispozici jsou následující příkazy:</value>
+  </data>
+  <data name="WSLCCLI_AvailableSubcommands" xml:space="preserve">
+    <value>K dispozici jsou následující dílčí příkazy:</value>
+  </data>
+  <data name="WSLCCLI_AvailableOptions" xml:space="preserve">
+    <value>K dispozici jsou následující možnosti:</value>
+  </data>
+  <data name="WSLCCLI_AvailableArguments" xml:space="preserve">
+    <value>K dispozici jsou následující argumenty:</value>
+  </data>
+  <data name="WSLCCLI_HelpForDetails" xml:space="preserve">
+    <value>Pokud chcete získat podrobnosti o konkrétním příkazu, předejte ho do argumentu help.</value>
+  </data>
+  <data name="WSLCCLI_InvalidNameError" xml:space="preserve">
+    <value>Nebyl rozpoznán název argumentu pro aktuální příkaz: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_CommandRequiresAdmin" xml:space="preserve">
+    <value>K provedení tohoto příkazu je třeba mít oprávnění správce.</value>
+  </data>
+  <data name="WSLCCLI_SessionIdArgDescription" xml:space="preserve">
+    <value>Zadejte relaci, která se má použít</value>
+  </data>
+  <data name="WSLCCLI_AttachArgDescription" xml:space="preserve">
+    <value>Připojení ke stdout/stderr kontejneru</value>
+  </data>
+  <data name="WSLCCLI_InteractiveArgDescription" xml:space="preserve">
+    <value>Připojit ke stdin a ponechat jej otevřený</value>
+  </data>
+  <data name="WSLCCLI_PortArgDescription" xml:space="preserve">
+    <value>Zadejte port, který se má použít</value>
+  </data>
+  <data name="WSLCCLI_ContainerIdArgDescription" xml:space="preserve">
+    <value>ID kontejneru</value>
+  </data>
+  <data name="WSLCCLI_MissingArgumentError" xml:space="preserve">
+    <value>Chybí hodnota argumentu: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_InvalidAliasError" xml:space="preserve">
+    <value>Nebyl rozpoznán alias argumentu pro aktuální příkaz: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_InvalidArgumentSpecifierError" xml:space="preserve">
+     <value>Neplatný specifikátor argumentu: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_AdjoinedNotFoundError" xml:space="preserve">
+     <value>Nenašel se sousedící alias typu příznak: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_AdjoinedNotFlagError" xml:space="preserve">
+     <value>Sousedící alias není příznak: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SingleCharAfterDashError" xml:space="preserve">
+     <value>Neplatný specifikátor argumentu: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_FlagContainAdjoinedError" xml:space="preserve">
+     <value>Argument příznaku nemůže obsahovat sousedící hodnotu: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ExtraPositionalError" xml:space="preserve">
+     <value>Našel se poziční argument, i když nebyl očekáván: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_MissingArgumentNameError" xml:space="preserve">
+     <value>Chybí název argumentu v: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_FailedResolvingForwardError" xml:space="preserve">
+     <value>Nepodařilo se vyřešit přesměrované argumenty počínaje argumentem: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_CommandHasNoForwardArgumentsError" xml:space="preserve">
+     <value>Byl zjištěn neplatný nadbytečný argument: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ValueMustBeLastInAliasChainError" xml:space="preserve">
+     <value>Argumenty aliasu s hodnotou musí být poslední v řetězci aliasů: '{}'</value>
+     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_CopyrightHeader" xml:space="preserve">
+     <value>Copyright (c) Microsoft Corporation. Všechna práva vyhrazena.
+Informace o ochraně osobních údajů k tomuto produktu najdete na stránce https://aka.ms/privacy.</value>
+     <comment>Copyright notice and privacy link</comment>
+  </data>
+  <data name="MessageWslcInvalidImage" xml:space="preserve">
+    <value>Neplatný obrázek: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcInvalidName" xml:space="preserve">
+    <value>Neplatný název: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessagePathNotAbsolute" xml:space="preserve">
+    <value>Cesta není absolutní: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcVolumeNotFound" xml:space="preserve">
+    <value>Svazek '{}' nebyl nalezen</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcImageNotFound" xml:space="preserve">
+    <value>Image {} se nenašla.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcMissingVolumeOption" xml:space="preserve">
+    <value>Chybí požadovaná možnost: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcInvalidVolumeType" xml:space="preserve">
+    <value>Nepodporovaný typ svazku: '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcUnsupportedVolumeDriverOpts" xml:space="preserve">
+    <value>Nepodporované možnosti ovladače svazku: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcVolumeInUse" xml:space="preserve">
+    <value>Svazek '{}' je používán.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcNetworkNotFound" xml:space="preserve">
+    <value>Síť nebyla nalezena: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcInvalidNetworkDriver" xml:space="preserve">
+    <value>Nepodporovaný síťový ovladač: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcNetworkInUse" xml:space="preserve">
+    <value>Síť {} má aktivní koncové body.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcNetworkAlreadyExists" xml:space="preserve">
+    <value>Síť {} už existuje.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcFailedToMountVolume" xml:space="preserve">
+    <value>Nepodařilo se vytvořit svazek '{}': {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcPortInUse" xml:space="preserve">
+    <value>Port {} se už používá, kontejner {} se nedá spustit.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcBothDockerAndContainerFileFound" xml:space="preserve">
+    <value>Našly se oba soubory Dockerfile i Containerfile. Použijte -f k výběru souboru, který chcete použít</value>
+    <comment>{FixedPlaceholder="Dockerfile"}{FixedPlaceholder="Containerfile"}{FixedPlaceholder="-f"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcFailedToOpenFile" xml:space="preserve">
+    <value>Nepodařilo se otevřít '{}': {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcBuildFileNotFound" xml:space="preserve">
+    <value>V '{}' nebyl nalezen žádný Containerfile ani Dockerfile</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcSessionStorageNotFound" xml:space="preserve">
+    <value>Nenašla se žádná relace WSLC v '{}'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcTagImageInvalidFormat" xml:space="preserve">
+    <value>Neplatný formát značky obrázku: '{}'. Očekávaný formát je 'name:tag'</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_RootCommandDesc" xml:space="preserve">
+    <value>WSLC je nástroj příkazového řádku pro kontejnery Windows Subsystem pro Linux.</value>
+    <comment>{Locked="WSLC"}Product names should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_RootCommandLongDesc" xml:space="preserve">
+    <value>WSLC je nástroj příkazového řádku pro kontejnery Windows Subsystem pro Linux. Umožňuje správu kontejnerů WSL a interakci s nimi z příkazového řádku.</value>
+    <comment>{Locked="WSLC"}{Locked="WSL"}Product names should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ContainerCommandDesc" xml:space="preserve">
+    <value>Spravovat kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ContainerCommandLongDesc" xml:space="preserve">
+    <value>Spravovat životní cyklus kontejnerů WSL, včetně jejich vytváření, spouštění, zastavování a odstraňování.</value>
+    <comment>{Locked="WSL"}Product names should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ContainerAttachDesc" xml:space="preserve">
+    <value>Připojit se ke kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_ContainerAttachLongDesc" xml:space="preserve">
+    <value>Připojí se ke kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_ContainerCreateDesc" xml:space="preserve">
+    <value>Vytvořit kontejner.</value>
+  </data>
+  <data name="WSLCCLI_ContainerCreateLongDesc" xml:space="preserve">
+    <value>Vytvoří kontejner.</value>
+  </data>
+  <data name="WSLCCLI_ContainerExecDesc" xml:space="preserve">
+    <value>Spustit příkaz v běžícím kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_ContainerExecLongDesc" xml:space="preserve">
+    <value>Spustí příkaz v běžícím kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_ContainerInspectDesc" xml:space="preserve">
+    <value>Zkontrolovat kontejner.</value>
+  </data>
+  <data name="WSLCCLI_ContainerInspectLongDesc" xml:space="preserve">
+    <value>Zobrazit podrobné informace o kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_ContainerKillDesc" xml:space="preserve">
+    <value>Ukončit kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ContainerKillLongDesc" xml:space="preserve">
+    <value>Ukončí kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ContainerListDesc" xml:space="preserve">
+    <value>Vypsat kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ContainerListLongDesc" xml:space="preserve">
+    <value>Vypíše kontejnery. Ve výchozím nastavení se zobrazují jen běžící kontejnery; použitím --all zahrnete všechny kontejnery.</value>
+    <comment>{Locked="--all "}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ContainerLogsDesc" xml:space="preserve">
+    <value>Zobrazit protokoly kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_ContainerLogsLongDesc" xml:space="preserve">
+    <value>Zobrazit protokoly kontejneru.</value>
+  </data>
+  <data name="WSLCCLI_ContainerRemoveDesc" xml:space="preserve">
+    <value>Odstranit kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ContainerRemoveLongDesc" xml:space="preserve">
+    <value>Odstraní kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ContainerRunDesc" xml:space="preserve">
+    <value>Spustit kontejner.</value>
+  </data>
+  <data name="WSLCCLI_ContainerRunLongDesc" xml:space="preserve">
+    <value>Runs a container. By default, the container is started in the foreground; use --detach to run in the background.</value>
+    <comment>{Locked="--detach "}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ContainerStartDesc" xml:space="preserve">
+    <value>Spustit kontejner.</value>
+  </data>
+  <data name="WSLCCLI_ContainerStartLongDesc" xml:space="preserve">
+    <value>Spustí kontejner.</value>
+  </data>
+  <data name="WSLCCLI_ContainerStopDesc" xml:space="preserve">
+    <value>Zastavit kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ContainerStopLongDesc" xml:space="preserve">
+    <value>Zastaví kontejnery.</value>
+  </data>
+  <data name="WSLCCLI_ImageCommandDesc" xml:space="preserve">
+    <value>Spravovat image.</value>
+  </data>
+  <data name="WSLCCLI_ImageCommandLongDesc" xml:space="preserve">
+    <value>Spravovat image kontejnerů, včetně jejich sestavování, stahování, vypisování a odstraňování.</value>
+  </data>
+  <data name="WSLCCLI_ImageBuildDesc" xml:space="preserve">
+    <value>Sestavit image ze souboru Dockerfile.</value>
+    <comment>{Locked="Dockerfile"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImageBuildLongDesc" xml:space="preserve">
+    <value>Sestaví image ze souboru Dockerfile a adresáře kontextu sestavení.</value>
+    <comment>{Locked="Dockerfile"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImageInspectDesc" xml:space="preserve">
+    <value>Zkontrolovat image.</value>
+  </data>
+  <data name="WSLCCLI_ImageInspectLongDesc" xml:space="preserve">
+    <value>Zkontrolovat image.</value>
+  </data>
+  <data name="WSLCCLI_ImageListDesc" xml:space="preserve">
+    <value>Vypsat image.</value>
+  </data>
+  <data name="WSLCCLI_ImageListLongDesc" xml:space="preserve">
+    <value>Vypíše image.</value>
+  </data>
+  <data name="WSLCCLI_ImageLoadDesc" xml:space="preserve">
+    <value>Načíst image.</value>
+  </data>
+  <data name="WSLCCLI_ImageLoadLongDesc" xml:space="preserve">
+    <value>Načte image.</value>
+  </data>
+  <data name="WSLCCLI_ImagePullDesc" xml:space="preserve">
+    <value>Stáhnout image.</value>
+  </data>
+  <data name="WSLCCLI_ImagePullLongDesc" xml:space="preserve">
+    <value>Stáhne image.</value>
+  </data>
+  <data name="WSLCCLI_ImagePruneAllArgDescription" xml:space="preserve">
+    <value>Odeberte všechny nepoužívané image, ne jenom ty nevyužité.</value>
+  </data>
+  <data name="WSLCCLI_ImagePruneDeleted" xml:space="preserve">
+    <value>Odstraněno: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImagePruneDesc" xml:space="preserve">
+    <value>Odeberte nepoužívané image.</value>
+  </data>
+  <data name="WSLCCLI_ImagePruneLongDesc" xml:space="preserve">
+    <value>Removes all dangling images. If --all is specified, removes all images not used by any container.</value>
+    <comment>{Locked="--all "}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImagePruneSpaceReclaimed" xml:space="preserve">
+    <value>Celkové uvolněné místo: {:.2f} MB</value>
+    <comment>{FixedPlaceholder="{:.2f}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImagePruneUntagged" xml:space="preserve">
+    <value>Neoznačeno: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImagePushDesc" xml:space="preserve">
+    <value>Nahrajte imagi do registru.</value>
+  </data>
+  <data name="WSLCCLI_ImagePushLongDesc" xml:space="preserve">
+    <value>Nahrajte imagi do registru.</value>
+  </data>
+  <data name="WSLCCLI_ImageRemoveDesc" xml:space="preserve">
+    <value>Odstranit image.</value>
+  </data>
+  <data name="WSLCCLI_ImageRemoveLongDesc" xml:space="preserve">
+    <value>Odstraní image.</value>
+  </data>
+  <data name="WSLCCLI_ImageSaveDesc" xml:space="preserve">
+    <value>Uložit image.</value>
+  </data>
+  <data name="WSLCCLI_ImageSaveLongDesc" xml:space="preserve">
+    <value>Uloží image.</value>
+  </data>
+  <data name="WSLCCLI_LoginDesc" xml:space="preserve">
+    <value>Přihlaste se k registru.</value>
+  </data>
+  <data name="WSLCCLI_LoginLongDesc" xml:space="preserve">
+    <value>Přihlaste se k registru. Pokud není zadán žádný server, je výchozí hodnota definována relací.</value>
+  </data>
+  <data name="WSLCCLI_LogoutDesc" xml:space="preserve">
+    <value>Odhlaste se z registru.</value>
+  </data>
+  <data name="WSLCCLI_LogoutLongDesc" xml:space="preserve">
+    <value>Odhlaste se z registru. Pokud není zadán žádný server, je výchozí hodnota definována relací.</value>
+  </data>
+  <data name="WSLCCLI_LoginSucceeded" xml:space="preserve">
+    <value>Přihlášení bylo úspěšné</value>
+  </data>
+  <data name="WSLCCLI_LogoutSucceeded" xml:space="preserve">
+    <value>Odebírají se přihlašovací údaje pro {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_LogoutNotFound" xml:space="preserve">
+    <value>Nepřihlášeno k: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_CredentialFileCorrupt" xml:space="preserve">
+    <value>Nepovedlo se parsovat soubor přihlašovacích údajů {}: soubor může být poškozený.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcFailedToWriteFile" xml:space="preserve">
+    <value>Zápis {} se nezdařil: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_LoginServerArgDescription" xml:space="preserve">
+    <value>Server</value>
+  </data>
+  <data name="WSLCCLI_LoginUsernameArgDescription" xml:space="preserve">
+    <value>Uživatelské jméno</value>
+  </data>
+  <data name="WSLCCLI_LoginPasswordArgDescription" xml:space="preserve">
+    <value>Heslo nebo osobní přístupový token (PAT)</value>
+    <comment>{Locked="PAT"}Acronym should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_LoginPasswordStdinArgDescription" xml:space="preserve">
+    <value>Přijmout heslo nebo osobní přístupový token (PAT) ze stdin</value>
+    <comment>{Locked="PAT"}{Locked="stdin"}Technical terms should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_LoginPasswordAndStdinMutuallyExclusive" xml:space="preserve">
+    <value>--password a --password-stdin je vzájemně vylučují</value>
+    <comment>{Locked="--password "}{Locked="--password-stdin "}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_LoginPasswordStdinRequiresUsername" xml:space="preserve">
+    <value>Musí být zadáno --username s --password-stdin</value>
+    <comment>{Locked="--username "}{Locked="--password-stdin"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_LoginUsernamePrompt" xml:space="preserve">
+    <value>Uživatelské jméno: </value>
+  </data>
+  <data name="WSLCCLI_LoginPasswordPrompt" xml:space="preserve">
+    <value>Heslo: </value>
+  </data>
+  <data name="WSLCCLI_RegistryCommandDesc" xml:space="preserve">
+    <value>Spravujte přihlašovací údaje registru.</value>
+  </data>
+  <data name="WSLCCLI_RegistryCommandLongDesc" xml:space="preserve">
+    <value>Spravujte přihlašovací údaje registru, včetně přihlašování a odhlašování v registrech kontejnerů.</value>
+  </data>
+  <data name="WSLCCLI_SystemCommandDesc" xml:space="preserve">
+    <value>Příkazy na úrovni systému</value>
+  </data>
+  <data name="WSLCCLI_SystemCommandLongDesc" xml:space="preserve">
+    <value>Příkazy pro správu na úrovni systému.</value>
+  </data>
+  <data name="WSLCCLI_ImageTagDesc" xml:space="preserve">
+    <value>Označit obrázek.</value>
+  </data>
+  <data name="WSLCCLI_ImageTagLongDesc" xml:space="preserve">
+    <value>Označí obrázek.</value>
+  </data>
+  <data name="WSLCCLI_SessionCommandDesc" xml:space="preserve">
+    <value>Spravovat relace.</value>
+  </data>
+  <data name="WSLCCLI_SessionCommandLongDesc" xml:space="preserve">
+    <value>Spravovat relace kontejnerů WSL, včetně výpisu aktivních relací a spouštění interaktivních shellů.</value>
+    <comment>{Locked="WSL"}Product names should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SessionListDesc" xml:space="preserve">
+    <value>Vypsat relace.</value>
+  </data>
+  <data name="WSLCCLI_SessionListLongDesc" xml:space="preserve">
+    <value>Vypíše aktivní relace.</value>
+  </data>
+  <data name="WSLCCLI_SessionShellDesc" xml:space="preserve">
+    <value>Připojit se k relaci.</value>
+  </data>
+  <data name="WSLCCLI_SessionShellLongDesc" xml:space="preserve">
+    <value>Připojí se k aktivní relaci. Pokud není zadáno ID relace, použije se výchozí relace wslc.</value>
+    <comment>{Locked="wslc"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SessionTerminateDesc" xml:space="preserve">
+    <value>Ukončit relaci.</value>
+  </data>
+  <data name="WSLCCLI_SessionTerminateLongDesc" xml:space="preserve">
+    <value>Ukončí aktivní relaci. Pokud není zadána žádná relace, bude výchozí relace ukončena.</value>
+  </data>
+  <data name="WSLCCLI_SessionEnterDesc" xml:space="preserve">
+    <value>Vstupte do dočasné relace.</value>
+  </data>
+  <data name="WSLCCLI_SessionEnterLongDesc" xml:space="preserve">
+    <value>Vytvoří trvalou relaci s danou cestou k úložišti a otevře v ní prostředí. Relace se odstraní při ukončení prostředí. Pokud není zadáno jméno, vygeneruje se GUID a vytiskne na stderr.</value>
+    <comment>{Locked="GUID"}{Locked="stderr"}Technical terms should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SessionEnterNameArgDescription" xml:space="preserve">
+    <value>Název relace. Pokud není zadán, vygeneruje se GUID.</value>
+    <comment>{Locked="GUID"}Technical terms should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SettingsCommandDesc" xml:space="preserve">
+    <value>Umožňuje otevřít soubor nastavení ve výchozím editoru.</value>
+  </data>
+  <data name="WSLCCLI_SettingsCommandLongDesc" xml:space="preserve">
+    <value>Otevře soubor uživatelského nastavení wslc ve výchozím systémovém editoru pro soubory .yaml.
+Při prvním spuštění vytvoří soubor se všemi nastaveními okomentovanými na jejich výchozí hodnoty.</value>
+    <comment>{Locked="wslc"}{Locked=".yaml"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SettingsResetDesc" xml:space="preserve">
+    <value>Obnovit nastavení na vestavěné výchozí hodnoty.</value>
+  </data>
+  <data name="WSLCCLI_SettingsResetLongDesc" xml:space="preserve">
+    <value>Přepíše soubor nastavení šablonou s okomentovanými výchozími hodnotami.</value>
+  </data>
+  <data name="WSLCCLI_SettingsResetConfirm" xml:space="preserve">
+    <value>Nastavení bylo resetováno na výchozí hodnoty.</value>
+  </data>
+  <data name="WSLCCLI_VersionDesc" xml:space="preserve">
+    <value>Zobrazí informace o verzi.</value>
+  </data>
+  <data name="WSLCCLI_VersionLongDesc" xml:space="preserve">
+    <value>Zobrazit informace o verzi tohoto nástroje.</value>
+  </data>
+  <data name="WSLCCLI_AllArgDescription" xml:space="preserve">
+    <value>Zobrazit vše bez ohledu na stav.</value>
+  </data>
+  <data name="WSLCCLI_BuildArgDescription" xml:space="preserve">
+    <value>Nastavit proměnné pro sestavení (KEY=VALUE)</value>
+    <comment>{Locked="KEY=VALUE"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_BuildPullArgDescription" xml:space="preserve">
+    <value>Vždy se pokusit vyžádat novější verzi image</value>
+  </data>
+  <data name="WSLCCLI_BuildTargetArgDescription" xml:space="preserve">
+    <value>Nastavit cílovou fázi sestavení na sestavení</value>
+  </data>
+  <data name="WSLCCLI_CommandArgDescription" xml:space="preserve">
+    <value>Příkaz ke spuštění</value>
+  </data>
+  <data name="WSLCCLI_ForceArgDescription" xml:space="preserve">
+    <value>Odstranit kontejnery, i když běží</value>
+  </data>
+  <data name="WSLCCLI_DetachArgDescription" xml:space="preserve">
+    <value>Spustit kontejner v odpojeném režimu</value>
+  </data>
+  <data name="WSLCCLI_EntrypointArgDescription" xml:space="preserve">
+    <value>Určuje spustitelný soubor procesu init kontejneru</value>
+  </data>
+  <data name="WSLCCLI_EnvArgDescription" xml:space="preserve">
+    <value>Páry Key=Value pro proměnné prostředí</value>
+    <comment>{Locked="Key=Value"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_EnvFileArgDescription" xml:space="preserve">
+    <value>Soubor obsahující páry key=value proměnných prostředí</value>
+    <comment>{Locked="key=value"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_FileArgDescription" xml:space="preserve">
+    <value>Cesta k souboru Dockerfile (pro čtení ze stdin použijte -)</value>
+    <comment>{Locked="Dockerfile"}{Locked="stdin"}{Locked="-"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_FollowArgDescription" xml:space="preserve">
+    <value>Sledovat výstup protokolu</value>
+  </data>
+  <data name="WSLCCLI_FormatArgDescription" xml:space="preserve">
+    <value>Formát výstupu (json nebo table) (výchozí: table)</value>
+    <comment>{Locked="json"}{Locked="table"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ForwardArgsDescription" xml:space="preserve">
+    <value>Argumenty, které se mají předat procesu init kontejneru</value>
+  </data>
+  <data name="WSLCCLI_GpusArgDescription" xml:space="preserve">
+    <value>Add GPU devices to the container ('all' to pass all GPUs)</value>
+    <comment>{Locked="all"}</comment>
+  </data>
+  <data name="WSLCCLI_GpusInvalidValue" xml:space="preserve">
+    <value>Neplatná hodnota {}: '{}'. Podporuje se pouze 'all'.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImageForceArgDescription" xml:space="preserve">
+    <value>Odstranit image, i když se používají</value>
+  </data>
+  <data name="WSLCCLI_ImageIdArgDescription" xml:space="preserve">
+    <value>Název obrázku</value>
+  </data>
+  <data name="WSLCCLI_InputArgDescription" xml:space="preserve">
+    <value>Poskytuje cestu k archivnímu souboru tar obsahujícímu image</value>
+  </data>
+  <data name="WSLCCLI_LabelArgDescription" xml:space="preserve">
+    <value>Nastavit metadata u objektu</value>
+  </data>
+  <data name="WSLCCLI_LabelKeyEmptyError" xml:space="preserve">
+    <value>Klíč popisku nemůže být prázdný</value>
+  </data>
+  <data name="WSLCCLI_HostnameArgDescription" xml:space="preserve">
+    <value>Název hostitele kontejneru</value>
+  </data>
+  <data name="WSLCCLI_NameArgDescription" xml:space="preserve">
+    <value>Název kontejneru</value>
+  </data>
+  <data name="WSLCCLI_NoCacheArgDescription" xml:space="preserve">
+    <value>Nepoužívejte mezipaměť při sestavování image</value>
+  </data>
+  <data name="WSLCCLI_NoPruneArgDescription" xml:space="preserve">
+    <value>Neodstraňovat neoznačené nadřazené image</value>
+  </data>
+  <data name="WSLCCLI_NoTruncArgDescription" xml:space="preserve">
+    <value>Nezkracovat výstup</value>
+  </data>
+  <data name="WSLCCLI_OutputArgDescription" xml:space="preserve">
+    <value>Cesta pro uložený image</value>
+  </data>
+  <data name="WSLCCLI_PathArgDescription" xml:space="preserve">
+    <value>Cesta k adresáři kontextu sestavení</value>
+  </data>
+  <data name="WSLCCLI_PublishArgDescription" xml:space="preserve">
+    <value>Publikovat port z kontejneru na hostitele</value>
+  </data>
+  <data name="WSLCCLI_PublishAllArgDescription" xml:space="preserve">
+    <value>Publikovat všechny vystavené porty na náhodné porty hostitele</value>
+  </data>
+  <data name="WSLCCLI_QuietArgDescription" xml:space="preserve">
+    <value>Vypíše pouze ID kontejnerů</value>
+  </data>
+  <data name="WSLCCLI_RemoveArgDescription" xml:space="preserve">
+    <value>Odstranit kontejner po jeho zastavení</value>
+  </data>
+  <data name="WSLCCLI_StopSignalArgDescription" xml:space="preserve">
+    <value>Signál k zastavení kontejneru</value>
+  </data>
+  <data name="WSLCCLI_ShmSizeArgDescription" xml:space="preserve">
+    <value>Velikost /dev/shm (např. 64 mil., 1G)</value>
+    <comment>{Locked="/dev/shm"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SessionIdPositionalArgDescription" xml:space="preserve">
+    <value>ID relace</value>
+  </data>
+  <data name="WSLCCLI_SessionStoragePositionalArgDescription" xml:space="preserve">
+    <value>Cesta k úložišti relace</value>
+  </data>
+  <data name="WSLCCLI_SignalArgDescription" xml:space="preserve">
+    <value>Signál k odeslání</value>
+  </data>
+  <data name="WSLCCLI_SourceArgDescription" xml:space="preserve">
+    <value>Aktuální nebo existující odkaz na obrázek ve formátu image-name[:tag]</value>
+  </data>
+  <data name="WSLCCLI_TagArgDescription" xml:space="preserve">
+    <value>Tag pro sestavený image</value>
+  </data>
+  <data name="WSLCCLI_TailArgDescription" xml:space="preserve">
+    <value>Počet řádků, které se mají zobrazit od konce protokolů</value>
+  </data>
+  <data name="WSLCCLI_TargetArgDescription" xml:space="preserve">
+    <value>Nový odkaz na obrázek ve formátu image-name[:tag]</value>
+  </data>
+  <data name="WSLCCLI_TimeArgDescription" xml:space="preserve">
+    <value>Doba v sekundách před spuštěním (výchozí: 5)</value>
+  </data>
+  <data name="WSLCCLI_TTYArgDescription" xml:space="preserve">
+    <value>Otevřít TTY s procesem kontejneru.</value>
+    <comment>{Locked="TTY"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_VerboseArgDescription" xml:space="preserve">
+    <value>Vypsat podrobné informace</value>
+  </data>
+  <data name="WSLCCLI_VersionArgDescription" xml:space="preserve">
+    <value>Zobrazit informace o verzi tohoto nástroje</value>
+  </data>
+  <data name="WSLCCLI_VolumeArgDescription" xml:space="preserve">
+    <value>Připojit svazek ke kontejneru pomocí bind mount</value>
+  </data>
+  <data name="WSLCCLI_WorkingDirArgDescription" xml:space="preserve">
+    <value>Pracovní adresář v kontejneru</value>
+  </data>
+  <data name="WSLCCLI_CIDFileArgDescription" xml:space="preserve">
+    <value>Zapsat ID kontejneru do zadané cesty</value>
+  </data>
+  <data name="WSLCCLI_DNSArgDescription" xml:space="preserve">
+    <value>IP adresa DNS nameserveru v resolv.conf</value>
+    <comment>{Locked="resolv.conf"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_DNSDomainArgDescription" xml:space="preserve">
+    <value>Nastavit výchozí doménu DNS</value>
+    <comment>{Locked="DNS"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_DNSOptionArgDescription" xml:space="preserve">
+    <value>Nastavit možnosti DNS</value>
+    <comment>{Locked="DNS"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_DNSSearchArgDescription" xml:space="preserve">
+    <value>Nastavit domény pro vyhledávání DNS</value>
+    <comment>{Locked="DNS"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_DomainnameArgDescription" xml:space="preserve">
+    <value>Název domény kontejneru</value>
+  </data>
+  <data name="WSLCCLI_GroupIdArgDescription" xml:space="preserve">
+    <value>ID skupiny pro proces</value>
+  </data>
+  <data name="WSLCCLI_NoDNSArgDescription" xml:space="preserve">
+    <value>Žádná konfigurace DNS v kontejneru</value>
+    <comment>{Locked="DNS"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ProgressArgDescription" xml:space="preserve">
+    <value>Typ průběhu (formát: none|ansi) (výchozí: ansi)</value>
+    <comment>{Locked="none"}{Locked="ansi"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_PullArgDescription" xml:space="preserve">
+    <value>Zásada stahování image (always|missing|never) (výchozí: never)</value>
+    <comment>{Locked="always"}{Locked="missing"}{Locked="never"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SchemeArgDescription" xml:space="preserve">
+    <value>Použít toto schéma pro připojení k registru</value>
+  </data>
+  <data name="WSLCCLI_TMPFSArgDescription" xml:space="preserve">
+    <value>Připojit tmpfs do kontejneru na zadané cestě</value>
+    <comment>{Locked="tmpfs"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_UserArgDescription" xml:space="preserve">
+    <value>ID uživatele pro proces (name|uid|uid:gid)</value>
+    <comment>{Locked="name|uid|uid:gid"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_VirtualArgDescription" xml:space="preserve">
+    <value>Zpřístupnit kontejneru virtualizační schopnosti</value>
+  </data>
+  <data name="WSLCCLI_ContainerExecForwardArgsDescription" xml:space="preserve">
+    <value>Argumenty, které se mají předat příkazu spuštěnému uvnitř kontejneru</value>
+  </data>
+  <data name="WSLCCLI_SessionListVerboseArgDescription" xml:space="preserve">
+    <value>Zobrazit podrobné informace o vypsaných relacích.</value>
+  </data>
+  <data name="WSLCCLI_InvalidFormatError" xml:space="preserve">
+    <value>Byl zadán neplatný typ formátu. Podporované typy formátu jsou: json, table</value>
+    <comment>{Locked="json"}{Locked="table"}Command line arguments should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_InvalidInspectError" xml:space="preserve">
+    <value>Neplatná hodnota {}: {} není rozpoznaný typ kontroly. Podporované typy kontrol jsou: {}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_InvalidSignalError" xml:space="preserve">
+    <value>Neplatná hodnota {}: {} není rozpoznaný název nebo číslo signálu (příklad: SIGKILL, kill nebo 9).</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_InvalidIntegerArgumentError" xml:space="preserve">
+    <value>Neplatná hodnota argumentu {}: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_SignalOutOfRangeError" xml:space="preserve">
+    <value>Neplatná hodnota {}: {} je mimo platný rozsah ({}-{}).</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_InvalidMemorySizeError" xml:space="preserve">
+    <value>Neplatná hodnota argumentu {}: {} Očekávaná velikost paměti (např. 256M, 1G)</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated{Locked="256M"}{Locked="1G"}</comment>
+  </data>
+  <data name="WSLCCLI_CIDFileAlreadyExistsError" xml:space="preserve">
+    <value>Soubor CID '{}' již existuje</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImageNotFoundPulling" xml:space="preserve">
+    <value>Image {} nebyl nalezen, stahuje se</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_EnvKeyEmptyError" xml:space="preserve">
+    <value>Klíč proměnné prostředí nesmí být prázdný</value>
+  </data>
+  <data name="WSLCCLI_EnvKeyWhitespaceError" xml:space="preserve">
+    <value>Klíč proměnné prostředí {} nesmí obsahovat prázdné znaky</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ImageLoadNoInputError" xml:space="preserve">
+    <value>Bylo požadováno načtení, ale nebyl poskytnut žádný vstup.</value>
+  </data>
+  <data name="WSLCCLI_VolumeCommandDesc" xml:space="preserve">
+    <value>Spravujte svazky.</value>
+  </data>
+  <data name="WSLCCLI_VolumeCommandLongDesc" xml:space="preserve">
+    <value>Spravujte životní cyklus svazků WSL, včetně jejich vytváření, kontroly, výpisu a odstranění.</value>
+    <comment>{Locked="WSL"}Product names should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_VolumeCreateDesc" xml:space="preserve">
+    <value>Vytvořte svazek.</value>
+  </data>
+  <data name="WSLCCLI_VolumeCreateLongDesc" xml:space="preserve">
+    <value>Vytvoří pojmenovaný svazek, který lze připojit ke kontejnerům.</value>
+  </data>
+  <data name="WSLCCLI_VolumeRemoveDesc" xml:space="preserve">
+    <value>Odeberte jeden nebo více svazků.</value>
+  </data>
+  <data name="WSLCCLI_VolumeRemoveLongDesc" xml:space="preserve">
+    <value>Odebere jeden nebo více svazků. Svazek nelze odebrat, pokud jej používá kontejner.</value>
+  </data>
+  <data name="WSLCCLI_VolumeInspectDesc" xml:space="preserve">
+    <value>Zobrazte podrobné informace o jednom nebo více svazcích.</value>
+  </data>
+  <data name="WSLCCLI_VolumeInspectLongDesc" xml:space="preserve">
+    <value>Zobrazte podrobné informace o jednom nebo více svazcích.</value>
+  </data>
+  <data name="WSLCCLI_VolumeListDesc" xml:space="preserve">
+    <value>Vypište svazky.</value>
+  </data>
+  <data name="WSLCCLI_VolumeListLongDesc" xml:space="preserve">
+    <value>Vypíše všechny svazky v relaci.</value>
+  </data>
+  <data name="WSLCCLI_VolumeNameArgDescription" xml:space="preserve">
+    <value>Název svazku</value>
+  </data>
+  <data name="WSLCCLI_DriverArgDescription" xml:space="preserve">
+    <value>Zadejte název ovladače svazku (výchozí {})</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_OptionsArgDescription" xml:space="preserve">
+    <value>Nastavení možností specifických pro ovladač</value>
+  </data>
+  <data name="WSLCCLI_VolumeListQuietArgDesc" xml:space="preserve">
+    <value>Vypíše jenom názvy svazků</value>
+  </data>
+  <data name="WSLCCLI_ImageSaveStdoutIsTerminalError" xml:space="preserve">
+    <value>Nelze zapsat obrázek do terminálu. Použijte příznak -o nebo přesměrujte stdout.</value>
+  </data>
+  <data name="WSLCCLI_VolumeFormatUsage" xml:space="preserve">
+    <value>Očekávaný formát: &lt;cesta k hostiteli | pojmenovaný svazek&gt;:&lt;cesta ke kontejneru&gt;[:mode]</value>
+    <comment>Usage string for volume mount specification.</comment>
+  </data>
+  <data name="WSLCCLI_VolumeInvalidSpec" xml:space="preserve">
+    <value>Neplatné specifikace svazku: {}. {}</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_VolumeHostPathEmpty" xml:space="preserve">
+    <value>Neplatné specifikace svazku: {}. Cesta k hostiteli nemůže být prázdná. {}</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_VolumeContainerPathEmpty" xml:space="preserve">
+    <value>Neplatné specifikace svazku: {}. Cesta ke kontejneru nemůže být prázdná. {}</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_VolumeContainerPathNotAbsolute" xml:space="preserve">
+    <value>Neplatné specifikace svazku: {}. Cesta ke kontejneru musí být absolutní cesta (začínající na /). {}</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_VolumeHostPathInvalid" xml:space="preserve">
+    <value>Neplatné specifikace svazku: {}. Cesta k hostiteli {} není platná cesta systému Windows.</value>
+    <comment>{FixedPlaceholder="{}"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_ObjectIdArgDescription" xml:space="preserve">
+    <value>Název nebo ID libovolného typu objektu</value>
+  </data>
+  <data name="WSLCCLI_TypeArgDescription" xml:space="preserve">
+    <value>Typ objektu, který se má zkontrolovat</value>
+  </data>
+  <data name="WSLCCLI_InspectDesc" xml:space="preserve">
+    <value>Zkontrolujte objekty.</value>
+  </data>
+  <data name="WSLCCLI_InspectLongDesc" xml:space="preserve">
+    <value>Zkontrolujte objekty.</value>
+  </data>
+  <data name="WSLCCLI_ObjectNotFoundError" xml:space="preserve">
+    <value>Objekt nebyl nalezen: {}</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_InvalidValue" xml:space="preserve">
+    <value>Upozornění: Neplatná hodnota pro nastavení {} v: {}:{}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_InvalidType" xml:space="preserve">
+    <value>Upozornění: Neplatný typ pro nastavení {} v: {}:{}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_NonStringKey" xml:space="preserve">
+    <value>Upozornění: V oddílu {} v: {}:{} je neřetězcový klíč.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_UnknownSection" xml:space="preserve">
+    <value>Upozornění: Neznámý oddíl nastavení {} v: {}:{}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_UnknownKey" xml:space="preserve">
+    <value>Upozornění: Neznámé nastavení {} v: {}:{}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_FailedToOpen" xml:space="preserve">
+    <value>Upozornění: Nepodařilo se otevřít soubor nastavení v {}. Chyba: {}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_ParseError" xml:space="preserve">
+    <value>Upozornění: Soubor nastavení v umístění {} nelze analyzovat. Chyba: {}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCUserSettings_Warning_InvalidStructure" xml:space="preserve">
+    <value>Upozornění: Soubor nastavení v {} je prázdný nebo má neplatnou strukturu. Očekávalo se mapování YAML.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
 </root>

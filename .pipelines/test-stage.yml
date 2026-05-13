@@ -3,6 +3,10 @@ parameters:
     type: boolean
     default: false
 
+  - name: includePackageStage
+    type: boolean
+    default: true
+
   - name: pool
     type: string
     default: ''
@@ -12,6 +16,7 @@ parameters:
     default:
       - wsl1
       - wsl2
+      - wslc
 
   - name: test_images
     type: object
@@ -29,7 +34,10 @@ parameters:
 
 stages:
 - stage: test
-  dependsOn: [build]
+  ${{ if parameters.includePackageStage }}:
+    dependsOn: [build_x64, package]
+  ${{ else }}:
+    dependsOn: [build_x64]
   jobs:
       - ${{ each version in parameters.versions }}:
         - ${{ each image in parameters.test_images }}:

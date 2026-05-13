@@ -183,7 +183,7 @@ private:
     void AddPlan9Share(_In_ PCWSTR AccessName, _In_ PCWSTR Path, _In_ UINT32 Port, _In_ wsl::windows::common::hcs::Plan9ShareFlags Flags, _In_ HANDLE UserToken, _In_ PCWSTR VirtIoTag);
 
     _Requires_lock_held_(m_guestDeviceLock)
-    std::wstring AddVirtioFsShare(_In_ bool Admin, _In_ PCWSTR Path, _In_ PCWSTR Options, _In_opt_ HANDLE UserToken = nullptr);
+    std::pair<std::wstring, std::wstring> AddVirtioFsShare(_In_ bool Admin, _In_ PCWSTR Path, _In_ PCWSTR Options, _In_opt_ HANDLE UserToken = nullptr);
 
     _Requires_lock_held_(m_lock)
     ULONG AttachDiskLockHeld(_In_ PCWSTR Disk, _In_ DiskType Type, _In_ MountFlags Flags, _In_ std::optional<ULONG> Lun, _In_ bool IsUserDisk, _In_ HANDLE UserToken);
@@ -222,12 +222,6 @@ private:
     bool InitializeDrvFsLockHeld(_In_ HANDLE UserToken);
 
     bool IsDnsTunnelingSupported() const;
-
-    bool IsDisableVgpuSettingsSupported() const;
-
-    bool IsVirtioSerialConsoleSupported() const;
-
-    bool IsVmemmSuffixSupported() const;
 
     _Requires_lock_held_(m_lock)
     DiskMountResult MountDiskLockHeld(
@@ -283,7 +277,7 @@ private:
     wsl::core::Config m_vmConfig;
     std::wstring m_comPipe0;
     std::wstring m_comPipe1;
-    int m_coldDiscardShiftSize;
+    int m_pageReportingOrder;
     WslTraceLoggingClient m_traceClient;
     std::filesystem::path m_rootFsPath;
     std::filesystem::path m_tempPath;
@@ -294,6 +288,7 @@ private:
     bool m_tempDirectoryCreated;
     bool m_enableInboxGpuLibs;
     bool m_defaultKernel = true;
+    bool m_privateKernelModules = false;
     LX_MINI_INIT_MOUNT_DEVICE_TYPE m_systemDistroDeviceType = LxMiniInitMountDeviceTypeInvalid;
     ULONG m_systemDistroDeviceId = ULONG_MAX;
     ULONG m_kernelModulesDeviceId = ULONG_MAX;
