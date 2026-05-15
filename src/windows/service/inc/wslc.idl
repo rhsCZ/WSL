@@ -155,6 +155,7 @@ typedef struct _KeyValuePair
 
 typedef KeyValuePair WSLCLabel;
 typedef KeyValuePair WSLCDriverOption;
+typedef KeyValuePair WSLCFilter;
 
 typedef KeyValuePairInformation WSLCLabelInformation;
 typedef KeyValuePairInformation WSLCDriverOptionInformation;
@@ -679,6 +680,25 @@ typedef struct _WSLCPruneImagesOptions
     ULONG LabelsCount;
 } WSLCPruneImagesOptions;
 
+typedef enum _WSLCListContainersFlags
+{
+    WSLCListContainersFlagsNone = 0,
+    WSLCListContainersFlagsAll = 1,
+} WSLCListContainersFlags;
+
+cpp_quote("#define WSLCListContainersFlagsValid (WSLCListContainersFlagsAll)")
+
+cpp_quote("DEFINE_ENUM_FLAG_OPERATORS(WSLCListContainersFlags);")
+
+typedef struct _WSLCListContainersOptions
+{
+    DWORD Flags; // WSLCListContainersFlags
+    LONG Limit;
+
+    [unique, size_is(FiltersCount)] const WSLCFilter* Filters;
+    ULONG FiltersCount;
+} WSLCListContainersOptions;
+
 typedef enum _WSLCSessionState
 {
     WSLCSessionStateRunning = 0,
@@ -726,11 +746,8 @@ interface IWSLCSession : IUnknown
     // Container management.
     HRESULT CreateContainer([in] const WSLCContainerOptions* Options, [out] IWSLCContainer** Container);
     HRESULT OpenContainer([in, ref] LPCSTR Id, [out] IWSLCContainer** Container);
-    HRESULT ListContainers([out, size_is(, *Count)] WSLCContainerEntry** Containers,
-                                            [out] ULONG* Count,
-                                            [out, size_is(, *PortsCount)] WSLCContainerPortMapping** Ports,
-                                            [out] ULONG* PortsCount);
-    HRESULT PruneContainers([in, unique, size_is(FiltersCount)] WSLCPruneLabelFilter* Filters, [in] DWORD FiltersCount, [in] ULONGLONG Until, [out] WSLCPruneContainersResults* Result);
+    HRESULT ListContainers([in, unique] const WSLCListContainersOptions* Options,[out, size_is(, *Count)] WSLCContainerEntry** Containers,[out] ULONG* Count, [out, size_is(, *PortsCount)] WSLCContainerPortMapping** Ports, [out] ULONG* PortsCount);
+    HRESULT PruneContainers([in, unique, size_is(FiltersCount)] const WSLCFilter* Filters, [in] ULONG FiltersCount, [out] WSLCPruneContainersResults* Result);
 
     // Create a process at the VM level. This is meant for debugging.
     HRESULT CreateRootNamespaceProcess([in, ref] LPCSTR Executable, [in, ref] const WSLCProcessOptions* Options, [out] IWSLCProcess** Process, [out] int* Errno);

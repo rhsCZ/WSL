@@ -549,6 +549,7 @@ private:
             {L"run", Localization::WSLCCLI_ContainerRunDesc()},
             {L"save", Localization::WSLCCLI_ImageSaveDesc()},
             {L"start", Localization::WSLCCLI_ContainerStartDesc()},
+            {L"stats", Localization::WSLCCLI_ContainerStatsDesc()},
             {L"stop", Localization::WSLCCLI_ContainerStopDesc()},
             {L"tag", Localization::WSLCCLI_ImageTagDesc()},
             {L"version", Localization::WSLCCLI_VersionDesc()},
