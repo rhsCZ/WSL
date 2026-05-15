@@ -27,8 +27,8 @@ Abstract:
         T_VALUE(c, EnableHostAddressLoopback), T_VALUE(c, EnableHostFileSystemAccess), T_VALUE(c, EnableIpv6), \
         T_VALUE(c, EnableLocalhostRelay), T_VALUE(c, EnableNestedVirtualization), T_VALUE(c, EnableSafeMode), \
         T_VALUE(c, EnableSparseVhd), T_VALUE(c, EnableVirtio), T_VALUE(c, EnableVirtio9p), T_VALUE(c, EnableVirtioFs), \
-        T_ENUM(c, FirewallConfigPresence), T_VALUE(c, KernelBootTimeout), T_SET(c, KernelCommandLine), \
-        T_VALUE(c, KernelDebugPort), T_SET(c, KernelModulesPath), T_STRING(c, KernelModulesList), T_SET(c, KernelPath), \
+        T_ENUM(c, FirewallConfigPresence), T_VALUE(c, KernelBootTimeout), T_SET(c, KernelCommandLine), T_VALUE(c, KernelDebugPort), \
+        T_SET(c, KernelHeadersPath), T_SET(c, KernelModulesPath), T_STRING(c, KernelModulesList), T_SET(c, KernelPath), \
         T_VALUE(c, LoadDefaultKernelModules), T_PRESENT(c, LoadKernelModulesPresence), T_VALUE(c, MaximumMemorySizeBytes), \
         T_VALUE(c, MaximumProcessorCount), T_ENUM(c, MemoryReclaim), T_VALUE(c, MemorySizeBytes), T_VALUE(c, MountDeviceTimeout), \
         T_ENUM(c, NetworkingMode), T_VALUE(c, ProcessorCount), T_SET(c, SwapFilePath), T_VALUE(c, SwapSizeBytes), \
@@ -233,6 +233,7 @@ struct FirewallConfiguration
 namespace ConfigSetting {
     static constexpr auto Kernel = "wsl2.kernel";
     static constexpr auto KernelCommandLine = "wsl2.kernelCommandLine";
+    static constexpr auto KernelHeaders = "wsl2.kernelHeaders";
     static constexpr auto KernelModules = "wsl2.kernelModules";
     static constexpr auto Memory = "wsl2.memory";
     static constexpr auto Processors = "wsl2.processors";
@@ -308,6 +309,7 @@ struct Config
     std::wstring KernelCommandLine;
     std::wstring KernelModulesList;
     std::filesystem::path KernelModulesPath;
+    std::filesystem::path KernelHeadersPath;
     UINT64 MemorySizeBytes = 0;
     UINT64 MaximumMemorySizeBytes = 0;
     int ProcessorCount = 0;
