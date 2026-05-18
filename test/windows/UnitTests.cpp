@@ -2128,6 +2128,24 @@ Error code: Wsl/InstallDistro/WSL_E_DISTRO_NOT_FOUND
             L"[experimental]\nignoredPorts=65536",
             std::format(L"wsl: Invalid integer value '65536' for key 'experimental.ignoredPorts' in {}:22\r\n", wslConfigPath));
 
+        // Verify experimental.swiotlb parsing and validation.
+        //
+        // With wsl2.virtio enabled (the default), a valid swiotlb value is accepted silently.
+        validateWarnings(L"[experimental]\nswiotlb=0x100000000,64M", L"");
+
+        // Malformed values are rejected by the parser; only the parser warning is reported.
+        validateWarnings(
+            L"[experimental]\nswiotlb=garbage",
+            std::format(L"wsl: Invalid SWIOTLB value 'garbage' for key 'experimental.swiotlb' in {}:22. Expected format: '0x<hex>,<size>K|M'\r\n", wslConfigPath));
+
+        validateWarnings(
+            L"[experimental]\nswiotlb=0x100000000,64g",
+            std::format(L"wsl: Invalid SWIOTLB value '0x100000000,64g' for key 'experimental.swiotlb' in {}:22. Expected format: '0x<hex>,<size>K|M'\r\n", wslConfigPath));
+
+        // With virtiofs enabled and no explicit swiotlb setting, the default value is silently
+        // applied by Config::Initialize (no warning expected).
+        validateWarnings(L"", L"", LxssGenerateTestConfig({.drvFsMode = DrvFsMode::VirtioFs}));
+
         // Verify that the vhdSize setting is parsed correctly.
         validateWarnings(L"[wsl2]\ndefaultVhdSize=64GB\n", L"");
 
