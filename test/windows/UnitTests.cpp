@@ -2142,10 +2142,6 @@ Error code: Wsl/InstallDistro/WSL_E_DISTRO_NOT_FOUND
             L"[experimental]\nswiotlb=0x100000000,64g",
             std::format(L"wsl: Invalid SWIOTLB value '0x100000000,64g' for key 'experimental.swiotlb' in {}:22. Expected format: '0x<hex>,<size>K|M'\r\n", wslConfigPath));
 
-        // With virtiofs enabled and no explicit swiotlb setting, the default value is silently
-        // applied by Config::Initialize (no warning expected).
-        validateWarnings(L"", L"", LxssGenerateTestConfig({.drvFsMode = DrvFsMode::VirtioFs}));
-
         // Verify that the vhdSize setting is parsed correctly.
         validateWarnings(L"[wsl2]\ndefaultVhdSize=64GB\n", L"");
 

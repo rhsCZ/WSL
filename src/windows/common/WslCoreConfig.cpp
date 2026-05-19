@@ -346,15 +346,6 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
         SwapSizeBytes = ((MemorySizeBytes / 4 + _1GB - 1) & ~(_1GB - 1));
     }
 
-    // Default the swiotlb config to a value that fits inside the VM's RAM. Users can override via
-    // experimental.swiotlb in .wslconfig; an explicit valid value is trusted as-is. If the user
-    // typed an invalid value, parseSwiotlb already warned and cleared the field, so the safe
-    // computed default is used instead.
-    if (SwiotlbConfig.empty())
-    {
-        SwiotlbConfig = wsl::windows::common::helpers::ComputeDefaultSwiotlbConfig(MemorySizeBytes);
-    }
-
     // Apply machine-wide policies to the configuration.
     auto key = wsl::windows::policies::OpenPoliciesKey();
     auto applyOverride = [&key](LPCWSTR ValueName, LPCWSTR SettingName, auto& value) {
@@ -474,6 +465,13 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
             NetworkingMode = (defaultNetworkingMode == NetworkingMode::VirtioProxy) ? NetworkingMode::None : NetworkingMode::Nat;
             EMIT_USER_WARNING(wsl::shared::Localization::MessageVirtioProxyRequiresVirtio(ToString(NetworkingMode)));
         }
+    }
+
+    // Compute a default swiotlb config only when a virtio device that requires bounce buffers is present.
+    // N.B. Must run after policy overrides so networking/fs modes reflect final values.
+    if (SwiotlbConfig.empty() && (EnableVirtioFs || EnableVirtio9p || (NetworkingMode == NetworkingMode::VirtioProxy)))
+    {
+        SwiotlbConfig = wsl::windows::common::helpers::ComputeDefaultSwiotlbConfig(MemorySizeBytes);
     }
 
     if (EnableVirtio9p)

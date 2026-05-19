@@ -752,14 +752,14 @@ void wsl::windows::common::helpers::AppendCommonKernelCommandLine(
 
 std::wstring wsl::windows::common::helpers::ComputeDefaultSwiotlbConfig(_In_ UINT64 memoryBytes)
 {
-    // Skip swiotlb on VMs below 1 GiB. The 64 MiB buffer would be a meaningful chunk of RAM and
-    // memory-constrained users likely value RAM over virtio device throughput. Users can still
-    // opt in explicitly via experimental.swiotlb in .wslconfig.
+    // Skip swiotlb on VMs below 1 GiB; the buffer would be a meaningful chunk of RAM. Users can
+    // still opt in explicitly via experimental.swiotlb in .wslconfig.
     if (memoryBytes < _1GB)
     {
         return {};
     }
 
-    const UINT64 base = std::min<UINT64>(memoryBytes / 2, 0x100000000ULL);
-    return std::format(L"0x{:x},64M", base);
+    // 256 MiB base sits below 4 GiB (32-bit PCI BAR limit on ARM64 virtio), below the Hyper-V
+    // low PCI MMIO hole (starts at >= 3 GiB on both x64 and ARM64), and above the kernel image.
+    return L"0x10000000,64M";
 }
