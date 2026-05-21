@@ -506,8 +506,9 @@ try
     {
     case DrvFsTransport::Virtiofs:
     {
-        auto result = MountVirtioFs(Source, Target, EffectiveOptions, Admin, Config, ExitCode, false);
-        if (result < 0)
+        bool BackendUnavailable = false;
+        auto result = MountVirtioFs(Source, Target, EffectiveOptions, Admin, Config, ExitCode, false, &BackendUnavailable);
+        if (result < 0 && BackendUnavailable)
         {
             fprintf(stderr, "mount: transport 'virtiofs' is not available\n");
         }
@@ -518,10 +519,12 @@ try
     case DrvFsTransport::Plan9:
     case DrvFsTransport::Virtio9p:
     {
-        auto result = MountPlan9(Source, Target, EffectiveOptions, Admin, Config, ExitCode, Transport);
-        if (result < 0 && Transport == DrvFsTransport::Virtio9p)
+        bool BackendUnavailable = false;
+        auto result = MountPlan9(Source, Target, EffectiveOptions, Admin, Config, ExitCode, Transport, &BackendUnavailable);
+        if (result < 0 && BackendUnavailable)
         {
-            fprintf(stderr, "mount: transport 'virtio9p' is not available\n");
+            const char* TransportName = (Transport == DrvFsTransport::Virtio9p) ? "virtio9p" : "plan9";
+            fprintf(stderr, "mount: transport '%s' is not available\n", TransportName);
         }
 
         return result;
@@ -581,7 +584,7 @@ Return Value:
     return ExitCode;
 }
 
-int MountPlan9Share(const char* Source, const char* Target, const char* Options, bool Admin, DrvFsTransport Transport, int* ExitCode)
+int MountPlan9Share(const char* Source, const char* Target, const char* Options, bool Admin, DrvFsTransport Transport, int* ExitCode, bool* BackendUnavailable)
 
 /*++
 
@@ -604,6 +607,10 @@ Arguments:
         is consulted to pick between virtio9p and plan9-over-hvsocket.
 
     ExitCode - Supplies an optional pointer that receives the exit code.
+
+    BackendUnavailable - Supplies an optional pointer set to true when the
+        failure is caused by the requested transport's backend not being
+        reachable. Left untouched on success or on other failures.
 
 Return Value:
 
@@ -632,7 +639,23 @@ Return Value:
     {
         Source = Admin ? LX_INIT_DRVFS_ADMIN_VIRTIO_TAG : LX_INIT_DRVFS_VIRTIO_TAG;
         MountOptions = std::format("msize=262144,trans=virtio,{}", Options);
-        return MountWithRetry(Source, Target, PLAN9_FS_TYPE, MountOptions.c_str(), ExitCode);
+        const int Result = MountWithRetry(Source, Target, PLAN9_FS_TYPE, MountOptions.c_str(), ExitCode);
+        if (Result < 0 && BackendUnavailable != nullptr)
+        {
+            //
+            // When the virtio-9p backend is not configured for this VM the kernel
+            // cannot find a virtio device matching the drvfs tag and mount(2)
+            // fails with ENODEV. ENOENT is treated the same way for robustness
+            // across kernel versions. UtilMount returns the negative errno.
+            //
+            const int Err = -Result;
+            if (Err == ENODEV || Err == ENOENT)
+            {
+                *BackendUnavailable = true;
+            }
+        }
+
+        return Result;
     }
     else
     {
@@ -640,6 +663,11 @@ Return Value:
         wil::unique_fd Fd{UtilConnectVsock(Port, false, LX_INIT_UTILITY_VM_PLAN9_BUFFER_SIZE)};
         if (!Fd)
         {
+            if (BackendUnavailable != nullptr)
+            {
+                *BackendUnavailable = true;
+            }
+
             return -1;
         }
 
@@ -650,7 +678,15 @@ Return Value:
     }
 }
 
-int MountPlan9(const char* Source, const char* Target, const char* Options, std::optional<bool> Admin, const wsl::linux::WslDistributionConfig& Config, int* ExitCode, DrvFsTransport Transport)
+int MountPlan9(
+    const char* Source,
+    const char* Target,
+    const char* Options,
+    std::optional<bool> Admin,
+    const wsl::linux::WslDistributionConfig& Config,
+    int* ExitCode,
+    DrvFsTransport Transport,
+    bool* BackendUnavailable)
 
 /*++
 
@@ -725,7 +761,7 @@ try
     //
 
     MountOptions += Plan9Options;
-    if (MountPlan9Share(Source, Target, MountOptions.c_str(), Elevated, Transport, ExitCode) < 0)
+    if (MountPlan9Share(Source, Target, MountOptions.c_str(), Elevated, Transport, ExitCode, BackendUnavailable) < 0)
     {
         return -1;
     }
@@ -734,7 +770,15 @@ try
 }
 CATCH_RETURN_ERRNO()
 
-int MountVirtioFs(const char* Source, const char* Target, const char* Options, std::optional<bool> Admin, const wsl::linux::WslDistributionConfig& Config, int* ExitCode, bool AllowFallback)
+int MountVirtioFs(
+    const char* Source,
+    const char* Target,
+    const char* Options,
+    std::optional<bool> Admin,
+    const wsl::linux::WslDistributionConfig& Config,
+    int* ExitCode,
+    bool AllowFallback,
+    bool* BackendUnavailable)
 
 /*++
 
@@ -798,6 +842,11 @@ try
     wil::unique_fd channelFd{UtilConnectVsock(LX_INIT_UTILITY_VM_VIRTIOFS_PORT, true).release()};
     if (!channelFd)
     {
+        if (BackendUnavailable != nullptr)
+        {
+            *BackendUnavailable = true;
+        }
+
         return -1;
     }
 
@@ -809,6 +858,17 @@ try
     {
         if (!AllowFallback)
         {
+            //
+            // When fallback is disabled the caller asked for virtiofs explicitly.
+            // A non-zero host response here means the host service could not set
+            // up a virtiofs share, which in practice means the virtiofs worker
+            // is not running for this VM.
+            //
+            if (BackendUnavailable != nullptr)
+            {
+                *BackendUnavailable = true;
+            }
+
             return -1;
         }
 

@@ -50,7 +50,21 @@ int MountDrvfs(const char* Source, const char* Target, const char* Options, std:
 
 int MountDrvfsEntry(int Argc, char* Argv[]);
 
-int MountPlan9Share(const char* Source, const char* Target, const char* Options, bool Admin, DrvFsTransport Transport = DrvFsTransport::Default, int* ExitCode = nullptr);
+// BackendUnavailable - Optional out-parameter set to true when the failure was
+//     caused by the transport backend being unreachable (e.g. the host-side
+//     virtiofs worker is not running, or no virtio-9p device with the expected
+//     tag is registered). Left untouched on success. When false (or null) the
+//     failure was caused by something else (bad mountpoint, permission denied,
+//     other mount(2) errno) and the underlying error has typically already
+//     been reported to stderr by the mount helper.
+int MountPlan9Share(
+    const char* Source,
+    const char* Target,
+    const char* Options,
+    bool Admin,
+    DrvFsTransport Transport = DrvFsTransport::Default,
+    int* ExitCode = nullptr,
+    bool* BackendUnavailable = nullptr);
 
 int MountPlan9(
     const char* Source,
@@ -59,7 +73,8 @@ int MountPlan9(
     std::optional<bool> Admin,
     const wsl::linux::WslDistributionConfig& Config,
     int* ExitCode,
-    DrvFsTransport Transport = DrvFsTransport::Default);
+    DrvFsTransport Transport = DrvFsTransport::Default,
+    bool* BackendUnavailable = nullptr);
 
 int MountVirtioFs(
     const char* Source,
@@ -68,7 +83,8 @@ int MountVirtioFs(
     std::optional<bool> Admin,
     const wsl::linux::WslDistributionConfig& Config,
     int* ExitCode = nullptr,
-    bool AllowFallback = true);
+    bool AllowFallback = true,
+    bool* BackendUnavailable = nullptr);
 
 int RemountVirtioFs(const char* Tag, const char* Target, const char* Options, bool Admin);
 
