@@ -116,7 +116,7 @@ private:
             std::is_nothrow_invocable_v<decltype(Routine), SessionEntry&, wil::com_ptr<IWSLCSession>&>,
             "ForEachSession routine must be noexcept to preserve container invariants during remove_if");
 
-        using TResult = std::conditional_t<std::is_same_v<T, void>, nullptr_t, std::optional<T>>;
+        using TResult = std::conditional_t<std::is_same_v<T, void>, std::nullptr_t, std::optional<T>>;
         TResult result{};
 
         auto each = [&](SessionEntry& entry) {
@@ -187,7 +187,7 @@ private:
     {
         std::vector<SessionEntry> deadSessions;
 
-        using TResult = std::conditional_t<std::is_same_v<T, void>, nullptr_t, std::optional<T>>;
+        using TResult = std::conditional_t<std::is_same_v<T, void>, std::nullptr_t, std::optional<T>>;
         TResult result{};
 
         {
