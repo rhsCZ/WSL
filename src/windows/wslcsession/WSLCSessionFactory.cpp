@@ -71,10 +71,9 @@ CATCH_RETURN()
 HRESULT wslc::WSLCSessionFactory::GetProcessHandle(_Out_ HANDLE* ProcessHandle)
 try
 {
-    wil::unique_handle process{OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, FALSE, GetCurrentProcessId())};
-    RETURN_LAST_ERROR_IF(!process);
+    RETURN_HR_IF(E_POINTER, ProcessHandle == nullptr);
 
-    *ProcessHandle = process.release();
+    *ProcessHandle = wslutil::DuplicateHandle(GetCurrentProcess(), PROCESS_SET_QUOTA | PROCESS_TERMINATE);
     return S_OK;
 }
 CATCH_RETURN()
