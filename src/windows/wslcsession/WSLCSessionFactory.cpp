@@ -72,6 +72,7 @@ HRESULT wslc::WSLCSessionFactory::GetProcessHandle(_Out_ HANDLE* ProcessHandle)
 try
 {
     RETURN_HR_IF(E_POINTER, ProcessHandle == nullptr);
+    *ProcessHandle = nullptr;
 
     *ProcessHandle = wslutil::DuplicateHandle(GetCurrentProcess(), PROCESS_SET_QUOTA | PROCESS_TERMINATE);
     return S_OK;
