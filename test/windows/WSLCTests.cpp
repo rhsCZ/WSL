@@ -451,6 +451,39 @@ class WSLCTests
             wil::com_ptr<IWSLCSession> session;
             VERIFY_ARE_EQUAL(sessionManager->CreateSession(&settings, WSLCSessionFlagsNone, nullptr, &session), E_INVALIDARG);
         }
+
+        // Reject invalid session flags.
+        {
+            auto settings = GetDefaultSessionSettings(L"invalid-session-flags");
+            wil::com_ptr<IWSLCSession> session;
+            VERIFY_ARE_EQUAL(E_INVALIDARG, sessionManager->CreateSession(&settings, static_cast<WSLCSessionFlags>(0x4), nullptr, &session));
+        }
+
+        // Reject invalid feature flags.
+        {
+            auto settings = GetDefaultSessionSettings(L"invalid-feature-flags");
+            settings.FeatureFlags = static_cast<WSLCFeatureFlags>(0x20);
+            wil::com_ptr<IWSLCSession> session;
+            VERIFY_ARE_EQUAL(E_INVALIDARG, sessionManager->CreateSession(&settings, WSLCSessionFlagsNone, nullptr, &session));
+        }
+
+        // Reject NULL output pointers across the session manager API.
+        {
+            auto settings = GetDefaultSessionSettings(L"null-out-session");
+            VERIFY_ARE_EQUAL(
+                HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), sessionManager->CreateSession(&settings, WSLCSessionFlagsNone, nullptr, nullptr));
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), sessionManager->OpenSession(0, nullptr));
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), sessionManager->OpenSessionByName(c_testSessionName, nullptr));
+
+            WSLCSessionListEntry* entries = nullptr;
+            ULONG count = 0;
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), sessionManager->ListSessions(nullptr, &count));
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), sessionManager->ListSessions(&entries, nullptr));
+        }
+
+        // The session object must reject NULL output pointers.
+        VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), m_defaultSession->GetId(nullptr));
+        VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), m_defaultSession->GetState(nullptr));
     }
 
     struct VmInfo
@@ -3585,6 +3618,15 @@ class WSLCTests
 
     WSLC_TEST_METHOD(CreateRootNamespaceProcess)
     {
+        // Reject invalid process flags.
+        {
+            WSLCProcessOptions options{};
+            options.Flags = static_cast<WSLCProcessFlags>(0x4);
+            wil::com_ptr<IWSLCProcess> process;
+            int err = 0;
+            VERIFY_ARE_EQUAL(E_INVALIDARG, m_defaultSession->CreateRootNamespaceProcess("/bin/true", &options, &process, &err));
+        }
+
         // Simple case
         {
             auto result = ExpectCommandResult(m_defaultSession.get(), {"/bin/sh", "-c", "echo OK"}, 0);
@@ -3626,6 +3668,17 @@ class WSLCTests
             // Validate that a null out handle is rejected.
 
             VERIFY_ARE_EQUAL(process.Get().GetStdHandle(WSLCFDStdout, nullptr), HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER));
+
+            // Validate that every IWSLCProcess output pointer is rejected when null.
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), process.Get().GetExitEvent(nullptr));
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), process.Get().GetPid(nullptr));
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), process.Get().GetState(nullptr, nullptr));
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), process.Get().GetFlags(nullptr));
+
+            // GetFlags succeeds with a valid pointer and reports the launched flags.
+            WSLCProcessFlags flags{};
+            VERIFY_SUCCEEDED(process.Get().GetFlags(&flags));
+            VERIFY_IS_TRUE(WI_IsFlagSet(flags, WSLCProcessFlagsStdin));
         }
 
         // Create a stuck process and kill it.
@@ -5108,6 +5161,25 @@ class WSLCTests
             VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), container.Get().GetInitProcess(nullptr));
         }
 
+        // Validate that CreateContainer rejects a null image and invalid flags.
+        {
+            WSLCContainerOptions options{};
+            wil::com_ptr<IWSLCContainer> container;
+
+            // A null Image field is rejected with E_POINTER.
+            VERIFY_ARE_EQUAL(E_POINTER, m_defaultSession->CreateContainer(&options, nullptr, &container));
+
+            // Invalid container flags are rejected with E_INVALIDARG.
+            options.Image = "debian:latest";
+            options.Flags = static_cast<WSLCContainerFlags>(0x10);
+            VERIFY_ARE_EQUAL(E_INVALIDARG, m_defaultSession->CreateContainer(&options, nullptr, &container));
+
+            // Invalid init process flags are rejected with E_INVALIDARG.
+            options.Flags = WSLCContainerFlagsNone;
+            options.InitProcessOptions.Flags = static_cast<WSLCProcessFlags>(0x4);
+            VERIFY_ARE_EQUAL(E_INVALIDARG, m_defaultSession->CreateContainer(&options, nullptr, &container));
+        }
+
         // Validate that env is correctly wired.
         {
             WSLCContainerLauncher launcher("debian:latest", "test-env", {"/bin/sh", "-c", "echo $testenv"}, {{"testenv=testvalue"}});
@@ -5600,6 +5672,13 @@ class WSLCTests
 
         // Test error paths
         {
+            // A null id and a null output pointer are rejected by the marshaller.
+            {
+                wil::com_ptr<IWSLCContainer> container;
+                VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), m_defaultSession->OpenContainer(nullptr, &container));
+                VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), m_defaultSession->OpenContainer("named-container", nullptr));
+            }
+
             expectOpen("", E_INVALIDARG);
             ValidateCOMErrorMessage(L"Invalid name: ''");
 
@@ -6538,6 +6617,142 @@ class WSLCTests
         VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(ERROR_SHARING_VIOLATION), m_defaultSession->DeleteNetwork(additionalNetwork.c_str()));
     }
 
+    WSLC_TEST_METHOD(ConnectDisconnectContainerNetworkTest)
+    {
+        auto launchContainer = [&](const std::string& name, std::string networkMode = "bridge") {
+            WSLCContainerLauncher launcher("debian:latest", name, {"sleep", "99999"}, {}, std::move(networkMode));
+            return launcher.Launch(*m_defaultSession);
+        };
+
+        auto createNetwork = [&](const std::string& name, const char* subnet) {
+            LOG_IF_FAILED(m_defaultSession->DeleteNetwork(name.c_str()));
+            WSLCDriverOption opts[] = {{"Subnet", subnet}};
+            WSLCNetworkOptions netOpts{};
+            netOpts.Name = name.c_str();
+            netOpts.Driver = "bridge";
+            netOpts.DriverOpts = opts;
+            netOpts.DriverOptsCount = ARRAYSIZE(opts);
+            VERIFY_SUCCEEDED(m_defaultSession->CreateNetwork(&netOpts, nullptr));
+        };
+
+        // Verifies both ConnectToNetwork and DisconnectFromNetwork reject with the same error for the given network name.
+        auto expectBothReject = [&](auto& container, LPCSTR networkName, HRESULT hr, LPCWSTR message) {
+            WSLCNetworkConnectionOptions options{};
+            options.NetworkName = networkName;
+            VERIFY_ARE_EQUAL(hr, container.Get().ConnectToNetwork(&options));
+            ValidateCOMErrorMessage(message);
+            VERIFY_ARE_EQUAL(hr, container.Get().DisconnectFromNetwork(networkName));
+            ValidateCOMErrorMessage(message);
+        };
+
+        // Round-trip: connect to a network, verify via inspect, then disconnect.
+        {
+            const std::string networkName = "test-connect-disconnect-net";
+            createNetwork(networkName, "172.53.0.0/16");
+            auto netCleanup = wil::scope_exit([&]() { LOG_IF_FAILED(m_defaultSession->DeleteNetwork(networkName.c_str())); });
+
+            auto container = launchContainer("test-connect-disconnect-ctr");
+
+            WSLCNetworkConnectionOptions options{};
+            options.NetworkName = networkName.c_str();
+            VERIFY_SUCCEEDED(container.Get().ConnectToNetwork(&options));
+
+            auto inspect = container.Inspect();
+            VERIFY_IS_TRUE(inspect.NetworkSettings.Networks.contains(networkName));
+            VERIFY_IS_FALSE(inspect.NetworkSettings.Networks.at(networkName).IPAddress.empty());
+
+            VERIFY_SUCCEEDED(container.Get().DisconnectFromNetwork(networkName.c_str()));
+
+            auto inspectAfter = container.Inspect();
+            VERIFY_IS_FALSE(inspectAfter.NetworkSettings.Networks.contains(networkName));
+            VERIFY_IS_TRUE(inspectAfter.NetworkSettings.Networks.contains("bridge"));
+        }
+
+        // Empty and non-existent network name.
+        {
+            auto container = launchContainer("test-connect-invalid-name");
+
+            expectBothReject(container, "", E_INVALIDARG, L"Network name cannot be empty.");
+
+            const std::string nonExistentNetwork = "nonexistent-network";
+            const auto expectedError =
+                std::format(L"Network not found: '{}'", std::wstring(nonExistentNetwork.begin(), nonExistentNetwork.end()));
+            expectBothReject(container, nonExistentNetwork.c_str(), WSLC_E_NETWORK_NOT_FOUND, expectedError.c_str());
+        }
+
+        // Host and none mode rejection.
+        {
+            const std::string networkName = "test-connect-mode-net";
+            createNetwork(networkName, "172.52.0.0/16");
+            auto netCleanup = wil::scope_exit([&]() { LOG_IF_FAILED(m_defaultSession->DeleteNetwork(networkName.c_str())); });
+
+            auto expectModeRejection = [&](const std::string& name, std::string mode) {
+                auto container = launchContainer(name, std::move(mode));
+                expectBothReject(
+                    container,
+                    networkName.c_str(),
+                    E_INVALIDARG,
+                    L"Additional networks are not allowed when the primary network mode is 'host' or 'none'.");
+            };
+
+            expectModeRejection("test-connect-host-ctr", "host");
+            expectModeRejection("test-connect-none-ctr", "none");
+        }
+
+        // ContainerIpAddress not supported.
+        {
+            auto container = launchContainer("test-connect-ip-ctr");
+
+            WSLCNetworkConnectionOptions options{};
+            options.NetworkName = "bridge";
+            options.ContainerIpAddress = "10.0.0.5";
+            VERIFY_ARE_EQUAL(E_NOTIMPL, container.Get().ConnectToNetwork(&options));
+            ValidateCOMErrorMessage(L"ContainerIpAddress is not yet supported.");
+        }
+
+        // Connect and disconnect from the container's primary network.
+        {
+            const std::string containerName = "test-connect-primary-ctr";
+            auto container = launchContainer(containerName);
+
+            // Connect to primary should fail — already connected.
+            WSLCNetworkConnectionOptions options{};
+            options.NetworkName = "bridge";
+            VERIFY_ARE_EQUAL(E_FAIL, container.Get().ConnectToNetwork(&options));
+            // Docker returns the container name in the error, not the ID.
+            const auto expectedError = std::format(
+                L"endpoint with name {} already exists in network bridge", std::wstring(containerName.begin(), containerName.end()));
+            ValidateCOMErrorMessage(expectedError);
+
+            // Disconnect from primary should succeed.
+            VERIFY_SUCCEEDED(container.Get().DisconnectFromNetwork("bridge"));
+
+            auto inspect = container.Inspect();
+            VERIFY_IS_FALSE(inspect.NetworkSettings.Networks.contains("bridge"));
+        }
+
+        // Connect to same secondary network twice.
+        {
+            const std::string networkName = "test-connect-twice-net";
+            const std::string containerName = "test-connect-twice-ctr";
+            createNetwork(networkName, "172.51.0.0/16");
+            auto netCleanup = wil::scope_exit([&]() { LOG_IF_FAILED(m_defaultSession->DeleteNetwork(networkName.c_str())); });
+
+            auto container = launchContainer(containerName);
+
+            WSLCNetworkConnectionOptions options{};
+            options.NetworkName = networkName.c_str();
+            VERIFY_SUCCEEDED(container.Get().ConnectToNetwork(&options));
+            VERIFY_ARE_EQUAL(E_FAIL, container.Get().ConnectToNetwork(&options));
+            // Docker returns the container name in the error, not the ID.
+            const auto expectedError = std::format(
+                L"endpoint with name {} already exists in network {}",
+                std::wstring(containerName.begin(), containerName.end()),
+                std::wstring(networkName.begin(), networkName.end()));
+            ValidateCOMErrorMessage(expectedError);
+        }
+    }
+
     WSLC_TEST_METHOD(ContainerNetworkModeHappyPathTest)
     {
         // Start container A on the default (bridged) network, then start container B sharing A's
@@ -6718,6 +6933,10 @@ class WSLCTests
             launcher.AddTmpfs("/mnt/wslc-tmpfs-inspect", "");
 
             auto container = launcher.Launch(*m_defaultSession);
+
+            // Validate that inspect fails with a null pointer.
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), container.Get().Inspect(nullptr));
+
             auto details = container.Inspect();
 
             // Verify basic container metadata.
@@ -6818,6 +7037,19 @@ class WSLCTests
             auto process = WSLCProcessLauncher({}, {"echo", "OK"}).Launch(container.Get());
 
             ValidateProcessOutput(process, {{1, "OK\n"}});
+        }
+
+        // Validate that Exec rejects invalid flags and a null output pointer.
+        {
+            WSLCProcessOptions options{};
+            wil::com_ptr<IWSLCProcess> process;
+
+            // A null output pointer is rejected by the marshaller.
+            VERIFY_ARE_EQUAL(HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER), container.Get().Exec(&options, nullptr, nullptr));
+
+            // Invalid process flags are rejected with E_INVALIDARG.
+            options.Flags = static_cast<WSLCProcessFlags>(0x4);
+            VERIFY_ARE_EQUAL(E_INVALIDARG, container.Get().Exec(&options, nullptr, &process));
         }
 
         // Validate that the working directory is correctly wired.

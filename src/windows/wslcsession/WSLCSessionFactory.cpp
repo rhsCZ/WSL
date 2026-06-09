@@ -38,6 +38,9 @@ HRESULT wslc::WSLCSessionFactory::CreateSession(
     _Out_ IWSLCSessionReference** ServiceRef)
 try
 {
+    RETURN_HR_IF_NULL(E_POINTER, Session);
+    RETURN_HR_IF_NULL(E_POINTER, ServiceRef);
+
     *Session = nullptr;
     *ServiceRef = nullptr;
 
@@ -72,7 +75,6 @@ HRESULT wslc::WSLCSessionFactory::GetProcessHandle(_Out_ HANDLE* ProcessHandle)
 try
 {
     RETURN_HR_IF(E_POINTER, ProcessHandle == nullptr);
-    *ProcessHandle = nullptr;
 
     *ProcessHandle = wslutil::DuplicateHandle(GetCurrentProcess(), PROCESS_SET_QUOTA | PROCESS_TERMINATE);
     return S_OK;
