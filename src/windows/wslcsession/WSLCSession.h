@@ -140,7 +140,12 @@ public:
 
     // VM management.
     IFACEMETHOD(CreateRootNamespaceProcess)(
-        _In_ LPCSTR Executable, _In_ const WSLCProcessOptions* Options, _Out_ IWSLCProcess** VirtualMachine, _Out_ int* Errno) override;
+        _In_ LPCSTR Executable,
+        _In_ const WSLCProcessOptions* Options,
+        _In_ ULONG TtyRows,
+        _In_ ULONG TtyColumns,
+        _Out_ IWSLCProcess** VirtualMachine,
+        _Out_ int* Errno) override;
 
     // Disk management.
     IFACEMETHOD(FormatVirtualDisk)(_In_ LPCWSTR Path) override;
@@ -202,6 +207,10 @@ private:
 
     __requires_lock_held(m_userHandlesLock) void CancelUserHandleIO();
     __requires_lock_held(m_userCOMCallbacksLock) void CancelUserCOMCallbacks();
+
+    _Requires_shared_lock_held_(m_lock)
+    void CreateContainerImpl(const WSLCContainerOptions* Options, IWSLCContainer** Container);
+
     void ConfigureStorage(const WSLCSessionInitSettings& Settings, PSID UserSid);
     void Ext4Format(const std::string& Device);
     _Requires_shared_lock_held_(m_lock)
@@ -235,6 +244,7 @@ private:
     std::optional<DockerEventTracker> m_eventTracker;
     wil::unique_event m_dockerdReadyEvent{wil::EventOptions::ManualReset};
     std::wstring m_displayName;
+    std::wstring m_creatorProcessName;
     std::filesystem::path m_storageVhdPath;
     std::filesystem::path m_swapVhdPath;
 
