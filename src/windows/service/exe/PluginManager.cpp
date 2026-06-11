@@ -1104,7 +1104,7 @@ void PluginManager::OnWslcImageDeleted(const WSLCSessionInformation* Session, LP
 STDMETHODIMP PluginHostCallbackImpl::WslcMountFolder(_In_ DWORD SessionId, _In_ LPCWSTR WindowsPath, _In_ LPCSTR Mountpoint, _In_ BOOL ReadOnly)
 try
 {
-    // TODO: Once plugins are out of proc, add logic to validate that the mountpoint isn't in use by another plugin.
+    // TODO: Add logic to validate that the mountpoint isn't in use by another plugin.
     RETURN_HR_IF(E_POINTER, WindowsPath == nullptr || Mountpoint == nullptr);
 
     auto session = m_owner.ResolveWslcSession(SessionId);

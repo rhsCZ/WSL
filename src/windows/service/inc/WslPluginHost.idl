@@ -185,15 +185,16 @@ interface IWslPluginHost : IUnknown
 
     //
     // WSLC plugin hooks. Mirror WSLPluginHooksV1 WSLC entries.
-    // UserToken is duplicated into the host by COM's system_handle marshaling.
-    // UserSid is serialized as a byte array (same convention as WSL hooks).
+    // UserToken is a scalar system handle, duplicated into the host by COM's
+    // system_handle marshaling (same convention as the WSL hooks above; a null
+    // handle marshals through unchanged). UserSid is serialized as a byte array.
     //
 
     HRESULT OnWslcSessionCreated(
         [in] DWORD SessionId,
         [in, string] LPCWSTR DisplayName,
         [in] DWORD ApplicationPid,
-        [in, unique, system_handle(sh_token)] HANDLE UserToken,
+        [in, system_handle(sh_token)] HANDLE UserToken,
         [in] DWORD SidSize,
         [in, unique, size_is(SidSize)] BYTE* SidData,
         [out, string] LPWSTR* ErrorMessage);
@@ -202,7 +203,7 @@ interface IWslPluginHost : IUnknown
         [in] DWORD SessionId,
         [in, string] LPCWSTR DisplayName,
         [in] DWORD ApplicationPid,
-        [in, unique, system_handle(sh_token)] HANDLE UserToken,
+        [in, system_handle(sh_token)] HANDLE UserToken,
         [in] DWORD SidSize,
         [in, unique, size_is(SidSize)] BYTE* SidData);
 
@@ -210,7 +211,7 @@ interface IWslPluginHost : IUnknown
         [in] DWORD SessionId,
         [in, string] LPCWSTR DisplayName,
         [in] DWORD ApplicationPid,
-        [in, unique, system_handle(sh_token)] HANDLE UserToken,
+        [in, system_handle(sh_token)] HANDLE UserToken,
         [in] DWORD SidSize,
         [in, unique, size_is(SidSize)] BYTE* SidData,
         [in, string] LPCSTR InspectJson,
@@ -220,7 +221,7 @@ interface IWslPluginHost : IUnknown
         [in] DWORD SessionId,
         [in, string] LPCWSTR DisplayName,
         [in] DWORD ApplicationPid,
-        [in, unique, system_handle(sh_token)] HANDLE UserToken,
+        [in, system_handle(sh_token)] HANDLE UserToken,
         [in] DWORD SidSize,
         [in, unique, size_is(SidSize)] BYTE* SidData,
         [in, string] LPCSTR ContainerId);
@@ -229,7 +230,7 @@ interface IWslPluginHost : IUnknown
         [in] DWORD SessionId,
         [in, string] LPCWSTR DisplayName,
         [in] DWORD ApplicationPid,
-        [in, unique, system_handle(sh_token)] HANDLE UserToken,
+        [in, system_handle(sh_token)] HANDLE UserToken,
         [in] DWORD SidSize,
         [in, unique, size_is(SidSize)] BYTE* SidData,
         [in, string] LPCSTR InspectJson);
@@ -238,7 +239,7 @@ interface IWslPluginHost : IUnknown
         [in] DWORD SessionId,
         [in, string] LPCWSTR DisplayName,
         [in] DWORD ApplicationPid,
-        [in, unique, system_handle(sh_token)] HANDLE UserToken,
+        [in, system_handle(sh_token)] HANDLE UserToken,
         [in] DWORD SidSize,
         [in, unique, size_is(SidSize)] BYTE* SidData,
         [in, string] LPCSTR ImageId);
