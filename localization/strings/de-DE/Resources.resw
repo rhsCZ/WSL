@@ -3107,7 +3107,7 @@ Erstellt bei der ersten Ausführung die Datei mit allen Einstellungen, die stand
     <value>Listet alle Volumes in der Sitzung auf.</value>
   </data>
   <data name="WSLCCLI_VolumePruneDesc" xml:space="preserve">
-    <value>Remove unused local volumes.</value>
+    <value>Nicht verwendete lokale Volumes entfernen.</value>
   </data>
   <data name="WSLCCLI_VolumePruneLongDesc" xml:space="preserve">
     <value>Entfernt alle nicht verwendeten anonymen lokalen Volumes. Bei Angabe --all werden auch nicht verwendete benannte Volumes entfernt. Ein Volume gilt als nicht verwendet, wenn von keinem Container darauf verwiesen wird.</value>
@@ -3117,11 +3117,11 @@ Erstellt bei der ersten Ausführung die Datei mit allen Einstellungen, die stand
     <value>Entfernen Sie alle nicht verwendeten Volumes, nicht nur anonyme.</value>
   </data>
   <data name="WSLCCLI_VolumePruneDeleted" xml:space="preserve">
-    <value>Deleted: {}</value>
+    <value>Gelöscht: {}</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="WSLCCLI_VolumePruneSpaceReclaimed" xml:space="preserve">
-    <value>Total reclaimed space: {}</value>
+    <value>Gesamter freigegebener Speicherplatz: {}</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="WSLCCLI_VolumeNameArgDescription" xml:space="preserve">
