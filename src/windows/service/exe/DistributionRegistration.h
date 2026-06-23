@@ -105,9 +105,9 @@ namespace Property {
     inline DistributionPropertyWithDefault<DWORD> RunOOBE{L"RunOOBE", 0};
     inline DistributionPropertyWithDefault<DWORD> Modern{L"Modern", 0};
 
-    inline DistributionPropertyWithDefault<std::vector<std::string>> DefaultEnvironmnent{
+    inline DistributionPropertyWithDefault<std::vector<std::string>> DefaultEnvironment{
         L"DefaultEnvironment",
-        {"HOSTTYPE=x86_64",
+        {"HOSTTYPE=" DISTRO_HOSTTYPE,
          "LANG=en_US.UTF-8",
          "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games",
          "TERM=xterm-256color"}};

@@ -73,6 +73,8 @@ Abstract:
 #define MOUNTS_DEVICE_FIELD 0
 #define MOUNTS_FSTYPE_FIELD 2
 
+using wsl::linux::WslDistributionConfig;
+
 static void ConfigApplyWindowsLibPath(const wsl::linux::WslDistributionConfig& Config);
 
 static bool CreateLoginSession(const wsl::linux::WslDistributionConfig& Config, const char* Username, uid_t Uid);
@@ -332,7 +334,7 @@ try
 CATCH_LOG()
 
 void ConfigHandleInteropMessage(
-    wsl::shared::SocketChannel& ResponseChannel,
+    wsl::shared::Transaction& Transaction,
     wsl::shared::SocketChannel& InteropChannel,
     bool Elevated,
     gsl::span<gsl::byte> Message,
@@ -348,7 +350,7 @@ Routine Description:
 
 Arguments:
 
-    ResponseChannel - Supplies channel used to send responses.
+    Transaction - Supplies transaction used to send responses.
 
     InteropChannel - Supplies a channel to the host to be used for create
         process requests.
@@ -379,7 +381,7 @@ try
 
     case LxInitMessageQueryDrvfsElevated:
     {
-        ResponseChannel.SendResultMessage<bool>(Elevated);
+        Transaction.SendResultMessage<bool>(Elevated);
         break;
     }
 
@@ -392,10 +394,10 @@ try
             return;
         }
 
-        auto Value = UtilGetEnvironmentVariable(Query->Buffer);
+        auto Value = UtilGetEnvironmentVariable(wsl::shared::string::FromMessageBuffer<LX_INIT_QUERY_ENVIRONMENT_VARIABLE>(Message));
         wsl::shared::MessageWriter<LX_INIT_QUERY_ENVIRONMENT_VARIABLE> Response(LxInitMessageQueryEnvironmentVariable);
         Response.WriteString(Value);
-        ResponseChannel.SendMessage<LX_INIT_QUERY_ENVIRONMENT_VARIABLE>(Response.Span());
+        Transaction.Send<LX_INIT_QUERY_ENVIRONMENT_VARIABLE>(Response.Span());
     }
 
     break;
@@ -403,7 +405,7 @@ try
     case LxInitMessageQueryFeatureFlags:
     {
         assert(Config.FeatureFlags.has_value());
-        ResponseChannel.SendResultMessage<int32_t>(Config.FeatureFlags.value());
+        Transaction.SendResultMessage<int32_t>(Config.FeatureFlags.value());
         break;
     }
 
@@ -417,7 +419,7 @@ try
         }
 
         bool success = false;
-        auto sendResponse = wil::scope_exit([&]() { ResponseChannel.SendResultMessage<bool>(success); });
+        auto sendResponse = wil::scope_exit([&]() { Transaction.SendResultMessage<bool>(success); });
 
         if (!Config.BootInit || Config.InitPid.value_or(0) != getpid())
         {
@@ -425,7 +427,8 @@ try
         }
         else
         {
-            success = CreateLoginSession(Config, CreateSession->Buffer, CreateSession->Uid);
+            success = CreateLoginSession(
+                Config, wsl::shared::string::FromMessageBuffer<LX_INIT_CREATE_LOGIN_SESSION>(Message), CreateSession->Uid);
         }
 
         break;
@@ -433,8 +436,20 @@ try
 
     case LxInitMessageQueryNetworkingMode:
         assert(Config.NetworkingMode.has_value());
-        ResponseChannel.SendResultMessage<uint8_t>(static_cast<uint8_t>(Config.NetworkingMode.value()));
+        Transaction.SendResultMessage<uint8_t>(static_cast<uint8_t>(Config.NetworkingMode.value()));
         break;
+
+    case LxInitMessageQueryVmId:
+    {
+        wsl::shared::MessageWriter<LX_INIT_QUERY_VM_ID> Response(LxInitMessageQueryVmId);
+        if (Config.VmId.has_value())
+        {
+            Response.WriteString(Config.VmId.value());
+        }
+
+        Transaction.Send<LX_INIT_QUERY_VM_ID>(Response.Span());
+        break;
+    }
 
     default:
         LOG_ERROR("unexpected message {}", Header->MessageType);
@@ -555,7 +570,7 @@ Return Value:
     // Initialize cgroups based on what the kernel supports.
     //
 
-    ConfigInitializeCgroups();
+    ConfigInitializeCgroups(Config);
 
     //
     // Attempt to register the NT interop binfmt extension.
@@ -604,7 +619,7 @@ try
 }
 CATCH_LOG()
 
-int ConfigInitializeInstance(wsl::shared::SocketChannel& Channel, gsl::span<gsl::byte> Buffer, wsl::linux::WslDistributionConfig& Config)
+int ConfigInitializeInstance(const std::function<void(const gsl::span<gsl::byte>&)>& SendResponse, gsl::span<gsl::byte> Buffer, wsl::linux::WslDistributionConfig& Config)
 
 /*++
 
@@ -618,7 +633,7 @@ Routine Description:
 
 Arguments:
 
-    MessageFd - Supplies a file descriptor to send the response message.
+    SendResponse - Supplies a function to send the response message.
 
     Buffer - Supplies the message buffer.
 
@@ -665,12 +680,7 @@ try
     //
 
     Config.FeatureFlags = Message->FeatureFlags;
-    char FeatureFlagsString[10];
-    snprintf(FeatureFlagsString, sizeof(FeatureFlagsString), "%x", Config.FeatureFlags.value());
-    if (setenv(WSL_FEATURE_FLAGS_ENV, FeatureFlagsString, 1) < 0)
-    {
-        LOG_ERROR("setenv failed {}", errno);
-    }
+    UtilSetFeatureFlags(Config.FeatureFlags.value());
 
     //
     // Determine the default UID which can be specified in /etc/wsl.conf.
@@ -835,8 +845,8 @@ try
 
     //
     // Run the Plan 9 server. This requires a DrvFs mount for the socket file,
-    // so either fstab or automount must be enabled to have a chance the mount
-    // exists.
+    // so either fstab or automount must be enabled to have a chance for the
+    // mount to be available.
     //
     // N.B. Failure to start the server is non-fatal.
     //
@@ -854,7 +864,7 @@ try
 
     if (WI_IsFlagSet(Config.FeatureFlags.value(), LxInitFeatureRootfsCompressed))
     {
-        LOG_WARNING("{} root file system is compressed, performance may be severly impacted.", DistributionName);
+        LOG_WARNING("{} root file system is compressed, performance may be severely impacted.", DistributionName);
     }
 
     //
@@ -914,7 +924,7 @@ try
         Response.WriteString(Response->VersionIndex, Version->c_str());
     }
 
-    Channel.SendMessage<LX_INIT_CONFIGURATION_INFORMATION_RESPONSE>(Response.Span());
+    SendResponse(Response.Span());
 
     //
     // Accept the interop connection.
@@ -941,6 +951,7 @@ try
     //
 
     if (Config.InitPid.has_value())
+    {
         try
         {
             std::string LinkPath = std::format(WSL_INTEROP_SOCKET_FORMAT, WSL_TEMP_FOLDER, 1, WSL_INTEROP_SOCKET);
@@ -949,7 +960,8 @@ try
                 LOG_ERROR("symlink({}, {}) failed {}", InteropServer.Path(), LinkPath.c_str(), errno);
             }
         }
-    CATCH_LOG()
+        CATCH_LOG()
+    }
 
     UtilCreateWorkerThread(
         "Interop", [InteropChannel = std::move(InteropChannel), InteropServer = std::move(InteropServer), Elevated, &Config]() mutable {
@@ -962,13 +974,14 @@ try
                     continue;
                 }
 
-                auto [Message, Span] = ClientChannel.ReceiveMessageOrClosed<MESSAGE_HEADER>();
+                auto transaction = ClientChannel.ReceiveTransaction();
+                auto [Message, Span] = transaction.ReceiveOrClosed<MESSAGE_HEADER>();
                 if (Message == nullptr)
                 {
                     continue;
                 }
 
-                ConfigHandleInteropMessage(ClientChannel, InteropChannel, Elevated, Span, Message, Config);
+                ConfigHandleInteropMessage(transaction, InteropChannel, Elevated, Span, Message, Config);
             }
         });
 
@@ -1662,17 +1675,6 @@ Return Value:
         ConfigAppendNtPath(Environment, Buffer);
     }
 
-    //
-    // If the VM ID environment variable is present, add it to the environment
-    // block.
-    //
-
-    auto VmId = getenv(LX_WSL2_VM_ID_ENV);
-    if (VmId)
-    {
-        Environment.AddVariable(LX_WSL2_VM_ID_ENV, VmId);
-    }
-
     return Environment;
 }
 
@@ -1724,10 +1726,6 @@ Return Value:
         if (strcmp(MountEnum.Current().FileSystemType, PLAN9_FS_TYPE) == 0)
         {
             MountSource = UtilParsePlan9MountSource(MountEnum.Current().SuperOptions);
-            if (MountSource.empty())
-            {
-                continue;
-            }
         }
         else if (strcmp(MountEnum.Current().FileSystemType, DRVFS_FS_TYPE) == 0)
         {
@@ -1736,9 +1734,14 @@ Return Value:
         }
         else if (strcmp(MountEnum.Current().FileSystemType, VIRTIO_FS_TYPE) == 0)
         {
-            MountSource = UtilParseVirtiofsMountSource(MountEnum.Current().Source);
+            MountSource = QueryVirtiofsMountSource(MountEnum.Current().Source);
         }
         else
+        {
+            continue;
+        }
+
+        if (MountSource.empty())
         {
             continue;
         }
@@ -1782,7 +1785,7 @@ Return Value:
         {LX_WSL2_GUI_APP_SUPPORT_ENV, "1"}};
 }
 
-void ConfigInitializeCgroups(void)
+void ConfigInitializeCgroups(wsl::linux::WslDistributionConfig& Config)
 
 /*++
 
@@ -1794,7 +1797,7 @@ Routine Description:
 
 Arguments:
 
-    None.
+    Config - Supplies the distribution configuration.
 
 Return Value:
 
@@ -1804,50 +1807,82 @@ Return Value:
 
 try
 {
-
-    //
-    // For WSL2 mount cgroup v2.
-    //
-    // N.B. Cgroup v2 is not implemented for WSL1.
-    //
+    std::vector<std::string> DisabledControllers;
 
     if (UtilIsUtilityVm())
     {
-        const auto Target = CGROUP_MOUNTPOINT;
+        if (Config.CGroup == WslDistributionConfig::CGroupVersion::v1)
+        {
+            auto commandLine = UtilReadFileContent("/proc/cmdline");
+            auto position = commandLine.find(CGROUPS_NO_V1);
+            if (position != std::string::npos)
+            {
+                auto list = commandLine.substr(position + sizeof(CGROUPS_NO_V1) - 1);
+                auto end = list.find_first_of(" \n");
+                if (end != std::string::npos)
+                {
+                    list = list.substr(0, end);
+                }
+
+                if (list == "all")
+                {
+                    LOG_WARNING("Distribution has cgroupv1 enabled, but kernel command line has {}all. Falling back to cgroupv2", CGROUPS_NO_V1);
+                    Config.CGroup = WslDistributionConfig::CGroupVersion::v2;
+                }
+                else
+                {
+                    DisabledControllers = wsl::shared::string::Split(list, ',');
+                }
+            }
+        }
+
+        if (Config.CGroup == WslDistributionConfig::CGroupVersion::v1)
+        {
+            THROW_LAST_ERROR_IF(mount("tmpfs", CGROUP_MOUNTPOINT, "tmpfs", (MS_NOSUID | MS_NODEV | MS_NOEXEC), "mode=755") < 0);
+        }
+
+        const auto Target = Config.CGroup == WslDistributionConfig::CGroupVersion::v1 ? CGROUP_MOUNTPOINT "/unified" : CGROUP_MOUNTPOINT;
         THROW_LAST_ERROR_IF(
             UtilMount(CGROUP2_DEVICE, Target, CGROUP2_DEVICE, (MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_RELATIME), "nsdelegate") < 0);
+
+        if (Config.CGroup == WslDistributionConfig::CGroupVersion::v2)
+        {
+            return;
+        }
     }
     else
     {
-        //
-        // Mount cgroup v1 when running in WSL1 mode.
-        //
-        // Open the /proc/cgroups file and parse each line, ignoring malformed
-        // lines and disabled controllers.
-        //
-
         THROW_LAST_ERROR_IF(mount("tmpfs", CGROUP_MOUNTPOINT, "tmpfs", (MS_NOSUID | MS_NODEV | MS_NOEXEC), "mode=755") < 0);
+    }
 
-        wil::unique_file Cgroups{fopen(CGROUPS_FILE, "r")};
-        THROW_LAST_ERROR_IF(!Cgroups);
+    //
+    // Mount cgroup v1 when running in WSL1 mode or when a WSL2 distro has automount.cgroups=v1 specified.
+    //
+    // Open the /proc/cgroups file and parse each line, ignoring malformed
+    // lines and disabled controllers.
+    //
 
-        ssize_t BytesRead;
-        char* Line = nullptr;
-        auto LineCleanup = wil::scope_exit([&]() { free(Line); });
-        size_t LineLength = 0;
-        while ((BytesRead = getline(&Line, &LineLength, Cgroups.get())) != -1)
+    wil::unique_file Cgroups{fopen(CGROUPS_FILE, "r")};
+    THROW_LAST_ERROR_IF(!Cgroups);
+
+    ssize_t BytesRead;
+    char* Line = nullptr;
+    auto LineCleanup = wil::scope_exit([&]() { free(Line); });
+    size_t LineLength = 0;
+    while ((BytesRead = getline(&Line, &LineLength, Cgroups.get())) != -1)
+    {
+        char* Subsystem = nullptr;
+        bool Enabled = false;
+        if ((UtilParseCgroupsLine(Line, &Subsystem, &Enabled) < 0) || (Enabled == false) ||
+            std::find(DisabledControllers.begin(), DisabledControllers.end(), Subsystem) != DisabledControllers.end())
+
         {
-            char* Subsystem = nullptr;
-            bool Enabled = false;
-            if ((UtilParseCgroupsLine(Line, &Subsystem, &Enabled) < 0) || (Enabled == false))
-            {
-                continue;
-            }
-
-            auto Target = std::format("{}/{}", CGROUP_MOUNTPOINT, Subsystem);
-            THROW_LAST_ERROR_IF(
-                UtilMount(CGROUP_DEVICE, Target.c_str(), CGROUP_DEVICE, (MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_RELATIME), Subsystem) < 0);
+            continue;
         }
+
+        auto Target = std::format("{}/{}", CGROUP_MOUNTPOINT, Subsystem);
+        THROW_LAST_ERROR_IF(
+            UtilMount(CGROUP_DEVICE, Target.c_str(), CGROUP_DEVICE, (MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_RELATIME), Subsystem) < 0);
     }
 }
 CATCH_LOG()
@@ -1967,7 +2002,7 @@ try
     // Initialize the mount options.
     //
     // N.B. If the options weren't specified, ConfigDrvFsOptions will be an
-    //      emptry string. Since DrvFs ignores empty mount options, the extra
+    //      empty string. Since DrvFs ignores empty mount options, the extra
     //      comma on the end in that case is not a problem.
     //
 
@@ -2104,7 +2139,7 @@ Return Value:
     //
 
     const char* const Argv[] = {MOUNT_COMMAND, MOUNT_FSTAB_ARG, nullptr};
-    if (UtilCreateProcessAndWait(Argv[0], Argv, nullptr, {{WSL_DRVFS_ELEVATED_ENV, Elevated ? "1" : "0"}}) < 0)
+    if (UtilCreateProcessAndWait(Argv[0], Argv, nullptr, {{WSL_DRVFS_ELEVATED_ENV, Elevated ? "1" : "0"}}, true) < 0)
     {
         auto message = wsl::shared::Localization::MessageFstabMountFailed();
         LOG_ERROR("{}", message.c_str());
@@ -2153,7 +2188,7 @@ Return Value:
     return Result;
 }
 
-int ConfigRemountDrvFs(gsl::span<gsl::byte> Buffer, wsl::shared::SocketChannel& Channel, const wsl::linux::WslDistributionConfig& Config)
+int ConfigRemountDrvFs(gsl::span<gsl::byte> Buffer, wsl::shared::Transaction& Transaction, const wsl::linux::WslDistributionConfig& Config)
 
 /*++
 
@@ -2174,7 +2209,7 @@ Return Value:
 
 --*/
 {
-    Channel.SendResultMessage<int32_t>(ConfigRemountDrvFsImpl(Buffer, Config));
+    Transaction.SendResultMessage<int32_t>(ConfigRemountDrvFsImpl(Buffer, Config));
 
     return 0;
 }
@@ -2213,7 +2248,7 @@ try
     const auto* Message = gslhelpers::try_get_struct<LX_INIT_MOUNT_DRVFS>(Buffer);
     if (!Message)
     {
-        LOG_ERROR("Unexpected sizeof for LX_INIT_MOUNT_DRVFS: {}u", Buffer.size());
+        LOG_ERROR("Unexpected sizeof for LX_INIT_MOUNT_DRVFS: {}", Buffer.size());
         return -1;
     }
 
@@ -2375,7 +2410,7 @@ try
 
             NewMountOptions = MountEntry.MountOptions;
             NewMountOptions += ',';
-            if (WSL_USE_VIRTIO_9P(Config))
+            if (WSL_USE_VIRTIO_9P())
             {
                 //
                 // Check if the existing mount is a drvfs mount that needs to be remounted.
@@ -2408,17 +2443,10 @@ try
                 NewMountOptions += ',';
             }
 
-            MountPlan9Filesystem(NewSource, MountEntry.MountPoint, NewMountOptions.c_str(), Message->Admin, Config);
+            MountPlan9Share(NewSource, MountEntry.MountPoint, NewMountOptions.c_str(), Message->Admin);
         }
         else if (strcmp(MountEntry.FileSystemType, VIRTIO_FS_TYPE) == 0)
         {
-            std::string_view Source = MountEntry.Source;
-            std::string_view OldTag = Message->Admin ? LX_INIT_DRVFS_VIRTIO_TAG : LX_INIT_DRVFS_ADMIN_VIRTIO_TAG;
-            if (!wsl::shared::string::StartsWith(Source, OldTag))
-            {
-                continue;
-            }
-
             RemountVirtioFs(MountEntry.Source, MountEntry.MountPoint, MountEntry.MountOptions, Message->Admin);
         }
         else
@@ -2454,7 +2482,7 @@ Arguments:
 
 Return Value:
 
-    The file descriptor represending the mount namespace on soccess, -1 on failure.
+    The file descriptor representing the mount namespace on success, -1 on failure.
 
 --*/
 
@@ -2505,7 +2533,7 @@ try
     // Attempt to open the /etc/default/locale file. If the file does not exist
     // then the $LANG environment variable will not be updated.
     //
-    // N.B. This file is being opened by root. The only user-visable content
+    // N.B. This file is being opened by root. The only user-visible content
     //      will be the contents of the last line of the file that contains
     //      "LANG=".
     //

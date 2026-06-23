@@ -30,12 +30,11 @@ srwlock g_sessionLock;
 std::optional<std::vector<std::shared_ptr<LxssUserSessionImpl>>> g_sessions =
     std::make_optional<std::vector<std::shared_ptr<LxssUserSessionImpl>>>();
 
-std::optional<wsl::windows::service::PluginManager> g_pluginManager;
+extern wsl::windows::service::PluginManager g_pluginManager;
 
 extern unique_event g_networkingReady;
 extern bool g_lxcoreInitialized;
 
-_Requires_lock_held_(g_sessionLock)
 void ClearSessionsAndBlockNewInstancesLockHeld(std::optional<std::vector<std::shared_ptr<LxssUserSessionImpl>>>& sessions)
 {
     std::lock_guard lock(g_sessionTerminationLock);
@@ -49,14 +48,11 @@ void ClearSessionsAndBlockNewInstancesLockHeld(std::optional<std::vector<std::sh
             // since that could lead to a deadlock if FindSessionByCookie is called since that would try to lock g_sessionLock
             // while holding the session inner lock
 
-            session->Shutdown(true);
+            session->Shutdown(true, ShutdownBehavior::ForceAfter30Seconds);
         }
 
         sessions.reset();
     }
-
-    // Unload plugins
-    g_pluginManager.reset();
 }
 
 void ClearSessionsAndBlockNewInstances()
@@ -67,7 +63,7 @@ void ClearSessionsAndBlockNewInstances()
         auto sessionsLock = g_sessionLock.lock_exclusive();
         sessions = std::move(g_sessions);
 
-        // This is required because the moved-from std::optional<T> isn't made empty, so this needs to be done explicitely.
+        // This is required because the moved-from std::optional<T> isn't made empty, so this needs to be done explicitly.
         g_sessions.reset();
     }
 
@@ -84,12 +80,6 @@ void SetSessionPolicy(_In_ bool enabled)
         if (!g_sessions)
         {
             g_sessions = std::make_optional<std::vector<std::shared_ptr<LxssUserSessionImpl>>>();
-        }
-
-        if (!g_pluginManager.has_value())
-        {
-            g_pluginManager.emplace();
-            g_pluginManager->LoadPlugins();
         }
     }
     else
@@ -237,7 +227,7 @@ std::weak_ptr<LxssUserSessionImpl> CreateInstanceForCurrentUser()
 
         if (!userSession)
         {
-            userSession.reset(new LxssUserSessionImpl(tokenInfo->User.Sid, sessionId, *g_pluginManager));
+            userSession.reset(new LxssUserSessionImpl(tokenInfo->User.Sid, sessionId, g_pluginManager));
             g_sessions->emplace_back(userSession);
         }
     }

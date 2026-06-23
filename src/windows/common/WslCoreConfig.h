@@ -14,26 +14,25 @@ Abstract:
 
 #pragma once
 
-#define T_SET(c, n) TraceLoggingValue(!(c).n.empty(), "config." #n "Set")
-
-#define T_PRESENT(val, n) TraceLoggingValue(val == ConfigKeyPresence::Present, "config." #n "Set")
-
-#define T_STRING(c, n) TraceLoggingValue(wsl::core::ToString((c).n), "config." #n "String")
-
-#define T_VALUE(c, n) TraceLoggingValue((c).n, "config." #n)
+#define T_ENUM(c, n) TraceLoggingValue(wsl::core::ToString((c).n), #n)
+#define T_PRESENT(c, n) TraceLoggingValue((c).n == ConfigKeyPresence::Present, #n)
+#define T_SET(c, n) TraceLoggingValue(!(c).n.empty(), #n "Set")
+#define T_STRING(c, n) TraceLoggingValue((c).n.c_str(), #n)
+#define T_VALUE(c, n) TraceLoggingValue((c).n, #n)
 
 #define CONFIG_TELEMETRY(c) \
     T_VALUE(c, BestEffortDnsParsing), T_VALUE(c, DhcpTimeout), T_VALUE(c, EnableAutoProxy), T_VALUE(c, EnableDebugConsole), \
-        T_VALUE(c, EnableDhcp), T_VALUE(c, EnableDnsProxy), T_VALUE(c, EnableDnsTunneling), T_VALUE(c, EnableGpuSupport), \
-        T_VALUE(c, EnableGuiApps), T_VALUE(c, EnableHardwarePerformanceCounters), T_VALUE(c, EnableHostAddressLoopback), \
-        T_VALUE(c, EnableHostFileSystemAccess), T_VALUE(c, EnableIpv6), T_SET(c, KernelModulesPath), \
+        T_VALUE(c, EnableDebugShell), T_VALUE(c, EnableDhcp), T_VALUE(c, EnableDnsProxy), T_VALUE(c, EnableDnsTunneling), \
+        T_VALUE(c, EnableGpuSupport), T_VALUE(c, EnableGuiApps), T_VALUE(c, EnableHardwarePerformanceCounters), \
+        T_VALUE(c, EnableHostAddressLoopback), T_VALUE(c, EnableHostFileSystemAccess), T_VALUE(c, EnableIpv6), \
         T_VALUE(c, EnableLocalhostRelay), T_VALUE(c, EnableNestedVirtualization), T_VALUE(c, EnableSafeMode), \
         T_VALUE(c, EnableSparseVhd), T_VALUE(c, EnableVirtio), T_VALUE(c, EnableVirtio9p), T_VALUE(c, EnableVirtioFs), \
-        T_STRING(c, FirewallConfigPresence), T_VALUE(c, KernelBootTimeout), T_SET(c, KernelCommandLine), \
-        T_VALUE(c, KernelDebugPort), T_SET(c, KernelPath), T_PRESENT((c).loadKernelModulesPresence, loadKernelModules), \
-        T_VALUE(c, LoadDefaultKernelModules), T_STRING(c, MemoryReclaim), T_VALUE(c, MemorySizeBytes), \
-        T_VALUE(c, MountDeviceTimeout), T_STRING(c, NetworkingMode), T_VALUE(c, ProcessorCount), T_SET(c, SwapFilePath), \
-        T_VALUE(c, SwapSizeBytes), T_SET(c, SystemDistroPath), T_VALUE(c, VhdSizeBytes), T_VALUE(c, VmIdleTimeout), T_SET(c, VmSwitch)
+        T_ENUM(c, FirewallConfigPresence), T_VALUE(c, KernelBootTimeout), T_SET(c, KernelCommandLine), T_VALUE(c, KernelDebugPort), \
+        T_STRING(c, KernelModulesList), T_SET(c, KernelModulesPath), T_SET(c, KernelPath), T_VALUE(c, LoadDefaultKernelModules), \
+        T_PRESENT(c, LoadKernelModulesPresence), T_VALUE(c, MaximumMemorySizeBytes), T_VALUE(c, MaximumProcessorCount), \
+        T_ENUM(c, MemoryReclaim), T_VALUE(c, MemorySizeBytes), T_VALUE(c, MountDeviceTimeout), T_ENUM(c, NetworkingMode), \
+        T_VALUE(c, ProcessorCount), T_SET(c, SwapFilePath), T_VALUE(c, SwapSizeBytes), T_VALUE(c, SwiotlbSizeBytes), \
+        T_SET(c, SystemDistroPath), T_VALUE(c, VhdSizeBytes), T_VALUE(c, VmIdleTimeout), T_SET(c, VmSwitch)
 
 namespace wsl::core {
 constexpr auto ToString(ConfigKeyPresence key)
@@ -89,7 +88,7 @@ enum NetworkingMode
     Nat = 1,
     Bridged = 2,
     Mirrored = 3,
-    VirtioProxy = 4
+    Consomme = 4
 };
 
 // Ensure the WslCoreConfig versions of the enum match the version that's used in mini init.
@@ -97,7 +96,7 @@ static_assert(static_cast<ULONG>(NetworkingMode::None) == LxMiniInitNetworkingMo
 static_assert(static_cast<ULONG>(NetworkingMode::Nat) == LxMiniInitNetworkingModeNat);
 static_assert(static_cast<ULONG>(NetworkingMode::Bridged) == LxMiniInitNetworkingModeBridged);
 static_assert(static_cast<ULONG>(NetworkingMode::Mirrored) == LxMiniInitNetworkingModeMirrored);
-static_assert(static_cast<ULONG>(NetworkingMode::VirtioProxy) == LxMiniInitNetworkingModeVirtioProxy);
+static_assert(static_cast<ULONG>(NetworkingMode::Consomme) == LxMiniInitNetworkingModeConsomme);
 
 constexpr auto ToString(NetworkingMode config) noexcept
 {
@@ -111,8 +110,8 @@ constexpr auto ToString(NetworkingMode config) noexcept
         return "Bridged";
     case NetworkingMode::Mirrored:
         return "Mirrored";
-    case NetworkingMode::VirtioProxy:
-        return "VirtioProxy";
+    case NetworkingMode::Consomme:
+        return "Consomme";
     default:
         return "Invalid";
     }
@@ -123,7 +122,9 @@ const std::map<std::string, wsl::core::NetworkingMode, shared::string::CaseInsen
     {ToString(NetworkingMode::Nat), NetworkingMode::Nat},
     {ToString(NetworkingMode::Bridged), NetworkingMode::Bridged},
     {ToString(NetworkingMode::Mirrored), NetworkingMode::Mirrored},
-    {ToString(NetworkingMode::VirtioProxy), NetworkingMode::VirtioProxy}};
+    {ToString(NetworkingMode::Consomme), NetworkingMode::Consomme},
+    // Legacy alias: the Consomme networking mode was previously named "VirtioProxy".
+    {"VirtioProxy", NetworkingMode::Consomme}};
 
 enum class FirewallAction
 {
@@ -290,6 +291,7 @@ namespace ConfigSetting {
         static constexpr auto IgnoredPorts = "experimental.ignoredPorts";
         static constexpr auto HostAddressLoopback = "experimental.hostAddressLoopback";
         static constexpr auto SetVersionDebug = "experimental.setVersionDebug";
+        static constexpr auto Swiotlb = "experimental.swiotlb";
 
     } // namespace Experimental
 } // namespace ConfigSetting
@@ -305,11 +307,10 @@ struct Config
     void SaveNetworkingSettings(_In_opt_ HANDLE UserToken) const;
     static unsigned long WriteConfigFile(_In_ LPCWSTR ConfigFilePath, _In_ ConfigKey KeyToWrite, _In_ bool RemoveKey = false);
 
-    // Values set in ParseConfigFile
     std::filesystem::path KernelPath;
     std::wstring KernelCommandLine;
+    std::wstring KernelModulesList;
     std::filesystem::path KernelModulesPath;
-    std::vector<std::wstring> KernelModulesList = {L"tun", L"ip_tables", L"br_netfilter"};
     UINT64 MemorySizeBytes = 0;
     UINT64 MaximumMemorySizeBytes = 0;
     int ProcessorCount = 0;
@@ -320,7 +321,7 @@ struct Config
     std::filesystem::path SwapFilePath;
     bool EnableLocalhostRelay = true;
     ConfigKeyPresence LocalhostRelayConfigPresence = ConfigKeyPresence::Absent;
-    ConfigKeyPresence loadKernelModulesPresence = ConfigKeyPresence::Absent;
+    ConfigKeyPresence LoadKernelModulesPresence = ConfigKeyPresence::Absent;
     bool LoadDefaultKernelModules = true;
     bool EnableNestedVirtualization = !shared::Arm64 && windows::common::helpers::IsWindows11OrAbove();
     bool EnableVirtio9p = false;
@@ -377,6 +378,7 @@ struct Config
     bool EnableHostAddressLoopback = false;
     std::filesystem::path CrashDumpFolder;
     int MaxCrashDumpCount = 10;
+    UINT64 SwiotlbSizeBytes = 0;
 
     // Temporary config value to help root cause the truncated archive errors in SetVersion()
     bool SetVersionDebug = false;

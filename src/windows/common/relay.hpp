@@ -15,11 +15,12 @@ Abstract:
 #pragma once
 
 #include <winsock2.h>
-#include "svccommio.hpp"
-
-#define LX_RELAY_BUFFER_SIZE 0x1000
+#include "ConsoleState.h"
+#include "HandleIO.h"
 
 namespace wsl::windows::common::relay {
+
+using namespace wsl::windows::common::io;
 
 std::thread CreateThread(_In_ HANDLE InputHandle, _In_ HANDLE OutputHandle, _In_opt_ HANDLE ExitHandle = nullptr, _In_ size_t BufferSize = LX_RELAY_BUFFER_SIZE);
 
@@ -42,6 +43,8 @@ bool InterruptableWait(_In_ HANDLE WaitObject, _In_ const std::vector<HANDLE>& E
 
 DWORD
 InterruptableWrite(_In_ HANDLE OutputHandle, _In_ gsl::span<const gsl::byte> Buffer, _In_ const std::vector<HANDLE>& ExitHandles, _In_ LPOVERLAPPED Overlapped);
+
+bool StandardInputRelay(HANDLE ConsoleHandle, HANDLE OutputHandle, std::function<void()>&& UpdateTerminalSize, HANDLE ExitEvent);
 
 enum class RelayFlags
 {

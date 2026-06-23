@@ -21,6 +21,7 @@ Abstract:
 #include "config.h"
 #include "message.h"
 #include <cassert>
+#include <filesystem>
 #include <optional>
 
 using namespace std::chrono_literals;
@@ -32,6 +33,8 @@ using namespace std::chrono_literals;
 #define PLAN9_SYMLINK_ROOT_OPTION "symlinkroot="
 #define PLAN9_UNC_PREFIX_LENGTH (2)
 
+#define VIRTIOFS_TAG_DIR "/run/wsl/virtiofs"
+
 #define LOG_STDERR(_errno) fprintf(stderr, "mount: %s\n", strerror(_errno))
 
 constexpr int c_exitCodeInvalidUsage = 1;
@@ -40,6 +43,62 @@ constexpr int c_exitCodeMountFail = 32;
 int MountFilesystem(const char* FsType, const char* Source, const char* Target, const char* Options, int* ExitCode = nullptr);
 
 int MountWithRetry(const char* Source, const char* Target, const char* FsType, const char* Options, int* ExitCode = nullptr);
+
+void SaveVirtiofsTagMapping(const char* Tag, const char* Source)
+
+/*++
+
+Routine Description:
+
+    This routine creates a symlink in VIRTIOFS_TAG_DIR that maps a virtiofs tag
+    to its Windows mount source path. This allows QueryVirtiofsMountSource to
+    resolve tags without talking to the service.
+
+Arguments:
+
+    Tag - Supplies the virtiofs tag.
+
+    Source - Supplies the Windows path the tag refers to.
+
+Return Value:
+
+    None.
+
+--*/
+
+{
+    //
+    // Validate the tag is a GUID to prevent path traversal.
+    //
+
+    const auto Guid = wsl::shared::string::ToGuid(Tag);
+    if (!Guid)
+    {
+        LOG_WARNING("Invalid virtiofs tag {}", Tag);
+        return;
+    }
+
+    //
+    // Canonicalize path separators to backslashes before persisting.
+    //
+
+    std::string CanonicalSource{Source};
+    UtilCanonicalisePathSeparator(CanonicalSource, PATH_SEP_NT);
+
+    UtilMkdirPath(VIRTIOFS_TAG_DIR, 0755);
+
+    auto LinkPath = std::format("{}/{}", VIRTIOFS_TAG_DIR, Tag);
+
+    //
+    // Remove any existing symlink for this tag before creating a new one.
+    //
+
+    unlink(LinkPath.c_str());
+    if (symlink(CanonicalSource.c_str(), LinkPath.c_str()) < 0)
+    {
+        LOG_WARNING("Failed to create virtiofs tag symlink {} -> {}: {}", LinkPath, CanonicalSource, errno);
+    }
+}
 
 std::pair<std::string, std::string> ConvertDrvfsMountOptionsToPlan9(std::string_view Options, const wsl::linux::WslDistributionConfig& Config)
 
@@ -150,8 +209,9 @@ Return Value:
     QueryPortMessage.MessageType = LxInitMessageQueryDrvfsElevated;
     QueryPortMessage.MessageSize = sizeof(QueryPortMessage);
 
-    channel.SendMessage(QueryPortMessage);
-    return channel.ReceiveMessage<RESULT_MESSAGE<bool>>().Result;
+    auto transaction = channel.StartTransaction();
+    transaction.Send(QueryPortMessage);
+    return transaction.Receive<RESULT_MESSAGE<bool>>().Result;
 }
 
 int MountFilesystem(const char* FsType, const char* Source, const char* Target, const char* Options, int* ExitCode)
@@ -220,11 +280,7 @@ int MountWithRetry(const char* Source, const char* Target, const char* FsType, c
 
 Routine Description:
 
-    This routine will perform a mount using the /bin/mount binary, and will
-    retry it if it fails.
-
-    N.B. This routine is used for virtio-9p and virtiofs which can transiently
-         fail to mount if the PCI device isn't ready yet.
+    This routine performs a mount with retry logic for DrvFs filesystems.
 
 Arguments:
 
@@ -246,52 +302,19 @@ Return Value:
 
 try
 {
-    int Result;
-    try
+    //
+    // Verify the target directory exists before mounting.
+    //
+
+    int Result = access(Target, F_OK);
+    if (Result < 0)
     {
-        bool PrintWarning = true;
-        wsl::shared::retry::RetryWithTimeout<void>(
-            [&]() { THROW_LAST_ERROR_IF(mountutil::MountFilesystem(Source, Target, FsType, Options) < 0); },
-            std::chrono::milliseconds{100},
-            std::chrono::seconds{2},
-            [&]() {
-                // For virtio-9p, there are two errors that could indicate the PCI device is not ready:
-                // EBUSY - Returned if all devices with the tag are already in use.
-                // ENOENT - Returned if there are no devices with the tag, which can happen after the VM first boots.
-                //   In this case, check if the the target exists; if it doesn't, ENOENT is for that and there's no reason to retry.
-                //
-                // For virtiofs, EINVAL will be returned if the tag is not ready.
-                auto savedErrno = wil::ResultFromCaughtException();
-                if (strcmp(FsType, PLAN9_FS_TYPE) == 0)
-                {
-                    if (errno != EBUSY && (errno != ENOENT || access(Target, F_OK) != 0))
-                    {
-                        errno = savedErrno;
-                        return false;
-                    }
-                }
-                else if ((strcmp(FsType, VIRTIO_FS_TYPE) == 0) && (errno != EINVAL))
-                {
-                    return false;
-                }
-
-                if (PrintWarning)
-                {
-                    LOG_WARNING("mount: waiting for virtio device {}", Source);
-                    PrintWarning = false;
-                }
-
-                return true;
-            });
-
-        Result = 0;
+        LOG_STDERR(errno);
     }
-    catch (...)
+    else
     {
-        errno = wil::ResultFromCaughtException();
-        auto parsed = mountutil::MountParseFlags(Options);
-        LOG_ERROR("mount({}, {}, {}, {:#x}, {}) failed: {}", Source, Target, FsType, parsed.MountFlags, parsed.StringOptions.c_str(), strerror(errno));
-        Result = -1;
+        auto Parsed = mountutil::MountParseFlags(Options);
+        Result = UtilMount(Source, Target, FsType, Parsed.MountFlags, Parsed.StringOptions.c_str(), std::chrono::seconds{2});
     }
 
     if (ExitCode)
@@ -335,70 +358,12 @@ try
     {
         return MountFilesystem(DRVFS_FS_TYPE, Source, Target, Options, ExitCode);
     }
-
-    // Use virtiofs if the source of the mount is the root of a drive, otherwise use 9p.
-    if (WSL_USE_VIRTIO_FS(Config))
+    else if (WSL_USE_VIRTIO_FS())
     {
-        if (wsl::shared::string::IsDriveRoot(Source))
-        {
-            return MountVirtioFs(Source, Target, Options, Admin, Config, ExitCode);
-        }
-
-        LOG_WARNING("virtiofs is only supported for mounting full drives, using 9p to mount {}", Source);
+        return MountVirtioFs(Source, Target, Options, Admin, Config, ExitCode);
     }
 
-    //
-    // Check if the path is a UNC path.
-    //
-
-    const char* Plan9Source;
-    std::string UncSource;
-    if ((strlen(Source) >= PLAN9_UNC_PREFIX_LENGTH) && ((Source[0] == '/') || (Source[0] == '\\')) &&
-        ((Source[1] == '/') || (Source[1] == '\\')))
-    {
-        UncSource = PLAN9_UNC_TRANSLATED_PREFIX;
-        UncSource += &Source[PLAN9_UNC_PREFIX_LENGTH];
-        Plan9Source = UncSource.c_str();
-    }
-    else
-    {
-        Plan9Source = Source;
-    }
-
-    //
-    // Check whether to use the elevated or regular 9p server.
-    //
-
-    bool Elevated = Admin.has_value() ? Admin.value() : IsDrvfsElevated();
-
-    //
-    // Initialize mount options.
-    //
-
-    auto Plan9Options = std::format("{};path={}", PLAN9_ANAME_DRVFS, Plan9Source);
-
-    //
-    // N.B. The cache option is added to the start of this so if the user
-    //      specifies one explicitly, it will override the default.
-    //
-
-    std::string MountOptions = "cache=mmap,";
-    auto ParsedOptions = ConvertDrvfsMountOptionsToPlan9(Options ? Options : "", Config);
-    Plan9Options += ParsedOptions.first;
-    MountOptions += ParsedOptions.second;
-
-    //
-    // Append the 9p mount options to the end of the other mount options and perform the mount operation.
-    //
-
-    MountOptions += Plan9Options;
-
-    if (MountPlan9Filesystem(Source, Target, MountOptions.c_str(), Elevated, Config, ExitCode) < 0)
-    {
-        return -1;
-    }
-
-    return 0;
+    return MountPlan9(Source, Target, Options, Admin, Config, ExitCode);
 }
 CATCH_RETURN_ERRNO()
 
@@ -444,7 +409,7 @@ Return Value:
     return ExitCode;
 }
 
-int MountPlan9Filesystem(const char* Source, const char* Target, const char* Options, bool Admin, const wsl::linux::WslDistributionConfig& Config, int* ExitCode)
+int MountPlan9Share(const char* Source, const char* Target, const char* Options, bool Admin, int* ExitCode)
 
 /*++
 
@@ -472,7 +437,7 @@ Return Value:
 
 {
     std::string MountOptions;
-    if (WSL_USE_VIRTIO_9P(Config))
+    if (WSL_USE_VIRTIO_9P())
     {
         Source = Admin ? LX_INIT_DRVFS_ADMIN_VIRTIO_TAG : LX_INIT_DRVFS_VIRTIO_TAG;
         MountOptions = std::format("msize=262144,trans=virtio,{}", Options);
@@ -489,9 +454,94 @@ Return Value:
 
         MountOptions =
             std::format("msize={},trans=fd,rfdno={},wfdno={},{}", LX_INIT_UTILITY_VM_PLAN9_BUFFER_SIZE, Fd.get(), Fd.get(), Options);
+
         return MountFilesystem(PLAN9_FS_TYPE, Source, Target, MountOptions.c_str(), ExitCode);
     }
 }
+
+int MountPlan9(const char* Source, const char* Target, const char* Options, std::optional<bool> Admin, const wsl::linux::WslDistributionConfig& Config, int* ExitCode)
+
+/*++
+
+Routine Description:
+
+    This routine will perform a DrvFs mount using Plan9.
+
+Arguments:
+
+    Source - Supplies the mount source.
+
+    Target - Supplies the mount target.
+
+    Options - Supplies the mount options.
+
+    Admin - Supplies an optional boolean to specify if the admin or non-admin share should be used.
+
+    Config - Supplies the distribution configuration.
+
+    ExitCode - Supplies an optional pointer that receives the exit code.
+
+Return Value:
+
+    0 on success, -1 on failure.
+
+--*/
+
+try
+{
+    //
+    // Check if the path is a UNC path.
+    //
+
+    const char* Plan9Source;
+    std::string UncSource;
+    if ((strlen(Source) >= PLAN9_UNC_PREFIX_LENGTH) && ((Source[0] == '/') || (Source[0] == '\\')) &&
+        ((Source[1] == '/') || (Source[1] == '\\')))
+    {
+        UncSource = PLAN9_UNC_TRANSLATED_PREFIX;
+        UncSource += &Source[PLAN9_UNC_PREFIX_LENGTH];
+        Plan9Source = UncSource.c_str();
+    }
+    else
+    {
+        Plan9Source = Source;
+    }
+
+    //
+    // Check whether to use the elevated or regular 9p server.
+    //
+
+    bool Elevated = Admin.has_value() ? Admin.value() : IsDrvfsElevated();
+
+    //
+    // Initialize mount options.
+    //
+
+    auto Plan9Options = std::format("{};path={}", PLAN9_ANAME_DRVFS, Plan9Source);
+
+    //
+    // N.B. The cache option is added to the start of this so if the user
+    //      specifies one explicitly, it will override the default.
+    //
+
+    std::string MountOptions = "cache=mmap,";
+    auto ParsedOptions = ConvertDrvfsMountOptionsToPlan9(Options ? Options : "", Config);
+    Plan9Options += ParsedOptions.first;
+    MountOptions += ParsedOptions.second;
+
+    //
+    // Append the 9p mount options to the end of the other mount options and perform the mount operation.
+    //
+
+    MountOptions += Plan9Options;
+    if (MountPlan9Share(Source, Target, MountOptions.c_str(), Elevated, ExitCode) < 0)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+CATCH_RETURN_ERRNO()
 
 int MountVirtioFs(const char* Source, const char* Target, const char* Options, std::optional<bool> Admin, const wsl::linux::WslDistributionConfig& Config, int* ExitCode)
 
@@ -523,7 +573,7 @@ Return Value:
 
 try
 {
-    assert(wsl::shared::string::IsDriveRoot(Source));
+    assert(WSL_USE_VIRTIO_FS());
 
     //
     // Check whether to use the elevated or non-elevated virtiofs server.
@@ -553,7 +603,7 @@ try
     AddShare.WriteString(AddShare->OptionsOffset, Plan9Options);
 
     //
-    // Connect to the wsl service to add the virtiofs share.
+    // Connect to the wsl service to add the virtiofs share. If adding the share fails, fallback to mounting using Plan9.
     //
 
     wsl::shared::SocketChannel Channel{UtilConnectVsock(LX_INIT_UTILITY_VM_VIRTIOFS_PORT, true), "VirtoFs"};
@@ -564,11 +614,10 @@ try
 
     gsl::span<gsl::byte> ResponseSpan;
     const auto& Response = Channel.Transaction<LX_INIT_ADD_VIRTIOFS_SHARE_MESSAGE>(AddShare.Span(), &ResponseSpan);
-
     if (Response.Result != 0)
     {
-        LOG_ERROR("Add virtiofs share for {} failed {}", Source, Response.Result);
-        return -1;
+        LOG_WARNING("Add virtiofs share for {} failed {}, falling back to Plan9", Source, Response.Result);
+        return MountPlan9(Source, Target, Options, Admin, Config, ExitCode);
     }
 
     //
@@ -576,7 +625,18 @@ try
     //
 
     auto* Tag = wsl::shared::string::FromSpan(ResponseSpan, Response.TagOffset);
-    return MountWithRetry(Tag, Target, VIRTIO_FS_TYPE, MountOptions.c_str(), ExitCode);
+    auto* ResponseSource = wsl::shared::string::FromSpan(ResponseSpan, Response.SourceOffset);
+    THROW_LAST_ERROR_IF(MountWithRetry(Tag, Target, VIRTIO_FS_TYPE, MountOptions.c_str(), ExitCode) < 0);
+
+    //
+    // Save the tag mapping.
+    //
+    // N.B. Use the source path from the response since the service canonicalizes it.
+    //
+
+    SaveVirtiofsTagMapping(Tag, ResponseSource);
+
+    return 0;
 }
 CATCH_RETURN_ERRNO()
 
@@ -607,6 +667,8 @@ Return Value:
 
 try
 {
+    assert(WSL_USE_VIRTIO_FS());
+
     wsl::shared::MessageWriter<LX_INIT_REMOUNT_VIRTIOFS_SHARE_MESSAGE> RemountShare(LxInitMessageRemountVirtioFsDevice);
     RemountShare->Admin = Admin;
     RemountShare.WriteString(RemountShare->TagOffset, Tag);
@@ -629,7 +691,61 @@ try
         return -1;
     }
 
-    Tag = wsl::shared::string::FromSpan(ResponseSpan, Response.TagOffset);
-    return MountWithRetry(Tag, Target, VIRTIO_FS_TYPE, Options);
+    auto* NewTag = wsl::shared::string::FromSpan(ResponseSpan, Response.TagOffset);
+    auto* Source = wsl::shared::string::FromSpan(ResponseSpan, Response.SourceOffset);
+    THROW_LAST_ERROR_IF(MountWithRetry(NewTag, Target, VIRTIO_FS_TYPE, Options) < 0);
+
+    SaveVirtiofsTagMapping(NewTag, Source);
+
+    return 0;
 }
 CATCH_RETURN_ERRNO()
+
+std::string QueryVirtiofsMountSource(const char* Tag)
+
+/*++
+
+Routine Description:
+
+    This routine takes a virtiofs tag and determines the Windows path it refers to
+    by reading the symlink created during mount.
+
+Arguments:
+
+    Tag - Supplies the virtiofs tag to query.
+
+Return Value:
+
+    The mount source, an empty string on failure.
+
+--*/
+
+try
+{
+    if (!WSL_USE_VIRTIO_FS())
+    {
+        return {};
+    }
+
+    //
+    // Validate the tag is a GUID.
+    //
+
+    const auto Guid = wsl::shared::string::ToGuid(Tag);
+    if (!Guid)
+    {
+        return {};
+    }
+
+    //
+    // Read the symlink that maps this tag to its Windows source path.
+    //
+
+    auto LinkPath = std::format("{}/{}", VIRTIOFS_TAG_DIR, Tag);
+    return std::filesystem::read_symlink(LinkPath).string();
+}
+catch (...)
+{
+    LOG_CAUGHT_EXCEPTION();
+    return {};
+}

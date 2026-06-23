@@ -14,9 +14,9 @@ parameters:
 stages:
   - stage: flight
     ${{ if eq(parameters.bypassTests, true) }}:
-        dependsOn: [build]
+        dependsOn: [package]
     ${{ else }}:
-        dependsOn: [test]
+        dependsOn: [test, package]
 
     jobs:
     - job: flight
@@ -30,7 +30,6 @@ stages:
         FlightId: $(StoreBrokerFlightId)
         StoreBrokerPath: $(Build.SourcesDirectory)\storebroker # location of StoreBroker information in the repo
         StoreBrokerPayloadPath: $(Build.ArtifactStagingDirectory)\StoreBrokerPayload # location of package created for flight
-        WSL_PACKAGE_VERSION: $[ dependencies.build.outputs['version.WSL_PACKAGE_VERSION'] ]
         ob_outputDirectory: '$(Build.SourcesDirectory)\out'
         ob_artifactBaseName: 'drop_wsl'
         ob_artifactSuffix: '_flight'
@@ -55,9 +54,9 @@ stages:
 
       # Download the build drop
       - task: DownloadPipelineArtifact@2
-        displayName: Download Bundle artifact
+        displayName: Download package artifact
         inputs:
-          artifact: "drop_wsl_build"
+          artifact: "drop_wsl_package"
           path: drop
 
       # copy the appxupload folder to the storebroker folder
@@ -67,7 +66,7 @@ stages:
         displayName: Copy AppxUpload artifact
 
       # creates a submission package that is published to the store; containers store page information and the WSL appxupload
-      - task: MS-RDX-MRO.windows-store-publish-dev.package-task.store-package@3
+      - task: MS-RDX-MRO.windows-store-publish.package-task.store-package@3
         displayName: 'Creating StoreBroker Payload'
         inputs:
           serviceEndpoint: 'AzureConnection-StoreBroker-WIF'
@@ -88,7 +87,7 @@ stages:
         displayName: Copy StoreBrokerPayload to drop
 
       # submit the package flight to the WSL SelfHost Flight Group
-      - task: MS-RDX-MRO.windows-store-publish-dev.flight-task.store-flight@3
+      - task: MS-RDX-MRO.windows-store-publish.flight-task.store-flight@3
         displayName: 'Flight StoreBroker Package to Partner Center - WSL SelfHost Flight Group'
         condition: and(succeeded(), eq('${{ parameters.publishPackage }}', true))
         inputs:
@@ -100,7 +99,7 @@ stages:
           zipPath: $(StoreBrokerPayloadPath)\WindowsSubsystemForLinux.zip
           force: true
           skipPolling: true # skips polling Partner Centre/store API for the state of the package; skipping will mean that errors in the process will only show up in Partner Center
-          targetPublishMode: Immediate # on completion of this task, the package will be published to the WSL SelfHost flight once ceritified (no manual clicking of any buttons in Partner Center)
+          targetPublishMode: Immediate # on completion of this task, the package will be published to the WSL SelfHost flight once certified (no manual clicking of any buttons in Partner Center)
           preserveSubmissionId: false
           deletePackages: true
           numberOfPackagesToKeep: 0
@@ -115,6 +114,6 @@ stages:
                 pip install --user -r tools/devops/requirements.txt
                 python tools/devops/create-release.py '${{ parameters.packageVersion }}' drop\bundle\Microsoft.WSL_${{ parameters.packageVersion }}.0_x64_ARM64.msixbundle drop\bundle\wsl.${{ parameters.packageVersion }}.0.arm64.msi drop\bundle\wsl.${{ parameters.packageVersion }}.0.x64.msi --no-fetch --github-token "$env:token" ${{ iif(parameters.publishPackage, '--publish --auto-release-notes', '--use-current-ref') }}
 
-        displayName: Create Github release
+        displayName: Create GitHub release
         env:
             token: $(GITHUB_RELEASE_TOKEN)

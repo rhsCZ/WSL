@@ -194,8 +194,9 @@ CreateProcessResult CreateProcess(_In_ CreateProcessParsed* Parsed, _In_ HANDLE 
     wsl::windows::common::helpers::SetHandleInheritable(StdOut);
     wsl::windows::common::helpers::SetHandleInheritable(StdErr);
 
-    wsl::windows::common::SubProcess process(Parsed->ApplicationName.c_str(), Parsed->CommandLine(), CREATE_UNICODE_ENVIRONMENT);
-    process.SetDesktop(L"winsta0\\default");
+    // N.B. Passing StartupFlags = 0 so that the cursor feedback is set to its default behavior.
+    // See: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfoa
+    wsl::windows::common::SubProcess process(Parsed->ApplicationName.c_str(), Parsed->CommandLine(), CREATE_UNICODE_ENVIRONMENT, 0);
 
     CreateProcessResult Result{};
     if (Parsed->CreatePseudoconsole)
@@ -348,7 +349,7 @@ std::string FormatCommandLine(gsl::span<gsl::byte> CommandLineData, USHORT Comma
     //
     // N.B. Any empty arguments or arguments that contain whitespace must be
     //      encapsulated in quotes. Quotes must also be escaped according to
-    //      stardard command-line parsing rules:
+    //      standard command-line parsing rules:
     //      https://msdn.microsoft.com/en-us/library/17w5ykft.aspx.
     //
     //      This logic is largely taken from AppendQuotedForWindows in

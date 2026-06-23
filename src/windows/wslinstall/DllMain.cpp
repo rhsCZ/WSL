@@ -13,6 +13,7 @@ Abstract:
 --*/
 
 #include "precomp.h"
+#include "install.h"
 #include <msiquery.h>
 #include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -23,6 +24,8 @@ Abstract:
 using unique_msi_handle = wil::unique_any<MSIHANDLE, decltype(MsiCloseHandle), &MsiCloseHandle>;
 
 using namespace wsl::windows::common::registry;
+using namespace wsl::windows::common::wslutil;
+using namespace wsl::windows::common::install;
 
 static constexpr auto c_progIdPrefix{L"App."};
 static constexpr auto c_protocolProgIdSuffix{L".Protocol"};
@@ -39,6 +42,12 @@ static constexpr auto c_wslSettingsProgIDPropertyName = L"WSLSETTINGSPROGID";
             TraceLoggingValue(__FUNCTION__, "Stage")); \
 \
         return NOERROR; \
+    }
+
+#define WSL_INSTALL_LOG(Name, ...) \
+    { \
+        WSL_LOG(Name, __VA_ARGS__); \
+        WriteInstallLog(std::format("MSI install: {}", Name)); \
     }
 
 #ifndef WSL_OFFICIAL_BUILD
@@ -460,7 +469,7 @@ extern "C" UINT __stdcall CleanMsixState(MSIHANDLE install)
         const std::map<LPCWSTR, LPCWSTR> keys{
             {L"SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application", L"WSL"},
             {L"SOFTWARE\\Classes\\CLSID", L"{7e6ad219-d1b3-42d5-b8ee-d96324e64ff6}"},
-            {L"SOFTWARE\\Classes\\AppID", L"{7F82AD86-755B-4870-86B1-D2E68DFE8A49}"},
+            {L"SOFTWARE\\Classes\\AppID", L"{17696EAC-9568-4CF5-BB8C-82515AAD6C09}"},
             {L"SOFTWARE\\Microsoft\\Terminal Server Client", L"Default"},
             {L"SOFTWARE\\Microsoft\\Terminal Server Client\\Default", L"OptionalAddIns"},
             {L"SOFTWARE\\Microsoft\\Terminal Server Client\\Default\\OptionalAddIns", L"WSLDVC_PACKAGE"}};
@@ -479,7 +488,7 @@ extern "C" UINT __stdcall CleanMsixState(MSIHANDLE install)
 
         /*
          * Because of a probable bug in MSIX / Packaged COM, it's possible that an old registration is still present on the machine,
-         * which will break instanciations of LxssUserSessions.
+         * which will break instantiations of LxssUserSessions.
          * Because this method executes after all MSIX packages have been removed, we know that this registration shouldn't be there,
          * so delete it if it still happens to be there.
          * See: https://github.com/microsoft/WSL/issues/10782
@@ -518,7 +527,7 @@ extern "C" UINT __stdcall CleanMsixState(MSIHANDLE install)
 extern "C" UINT __stdcall DeprovisionMsix(MSIHANDLE install)
 try
 {
-    WSL_LOG("DeprovisionMsix");
+    WSL_INSTALL_LOG("DeprovisionMsix");
 
     const winrt::Windows::Management::Deployment::PackageManager packageManager;
     const auto result = packageManager.DeprovisionPackageForAllUsersAsync(wsl::windows::common::wslutil::c_msixPackageFamilyName).get();
@@ -541,7 +550,7 @@ catch (...)
 extern "C" UINT __stdcall RemoveMsixAsSystem(MSIHANDLE install)
 try
 {
-    WSL_LOG("RemoveMsixAsSystem");
+    WSL_INSTALL_LOG("RemoveMsixAsSystem");
 
     const winrt::Windows::Management::Deployment::PackageManager packageManager;
 
@@ -570,7 +579,7 @@ catch (...)
 extern "C" UINT __stdcall RemoveMsixAsUser(MSIHANDLE install)
 try
 {
-    WSL_LOG("RemoveMsixAsUser");
+    WSL_INSTALL_LOG("RemoveMsixAsUser");
 
     const winrt::Windows::Management::Deployment::PackageManager packageManager;
 
@@ -598,7 +607,7 @@ catch (...)
 wsl::windows::common::filesystem::TempFile ExtractMsix(MSIHANDLE install)
 {
     // N.B. We need to open the database this way instead of calling MsiGetActiveDatabase() because
-    // this is defered action so we don't have access to the MSI context here.
+    // this is deferred action so we don't have access to the MSI context here.
     // The MSIX needs to be extracted like this because in the case of an upgrade this action runs before 'MoveFiles' so the WSL directory isn't available yet.
 
     const auto installTarget = GetInstallTarget(install);
@@ -639,7 +648,7 @@ wsl::windows::common::filesystem::TempFile ExtractMsix(MSIHANDLE install)
 extern "C" UINT __stdcall InstallMsixAsUser(MSIHANDLE install)
 try
 {
-    WSL_LOG("InstallMsixAsUser");
+    WSL_INSTALL_LOG("InstallMsixAsUser");
 
     // RegisterPackageByFamilyNameAsync() cannot be run as SYSTEM.
     //  If this thread runs as SYSTEM, simply skip this step.
@@ -682,7 +691,7 @@ try
     // Release a file handle to the MSIX file so that it can be installed.
     msixFile.Handle.reset();
 
-    WSL_LOG("InstallMsix", TraceLoggingValue(msixFile.Path.c_str(), "Path"));
+    WSL_INSTALL_LOG("InstallMsix", TraceLoggingValue(msixFile.Path.c_str(), "Path"));
 
     winrt::Windows::Management::Deployment::PackageManager packageManager;
 
@@ -699,7 +708,7 @@ try
         catch (...)
         {
             // For convenience, automatically trust the MSIX's certificate if this is NOT an official build and
-            // the package installation failed because of an unstrusted certificate.
+            // the package installation failed because of an untrusted certificate.
 #ifndef WSL_OFFICIAL_BUILD
             auto error = wil::ResultFromCaughtException();
             if (error == CERT_E_UNTRUSTEDROOT)
@@ -780,10 +789,21 @@ catch (...)
     return ERROR_INSTALL_FAILURE;
 }
 
+extern "C" UINT __stdcall WslFinalizeInstallation(MSIHANDLE install)
+{
+    try
+    {
+        WSL_INSTALL_LOG("WslFinalizeInstallation");
+    }
+    CATCH_LOG();
+
+    return NOERROR;
+}
+
 extern "C" UINT __stdcall WslValidateInstallation(MSIHANDLE install)
 try
 {
-    WSL_LOG("WslValidateInstallation");
+    WSL_INSTALL_LOG("WslValidateInstallation");
 
     // TODO: Use a more precise version check so we don't install if the Windows build doesn't support lifted.
 
@@ -916,6 +936,50 @@ extern "C" UINT __stdcall CalculateWslSettingsProtocolIds(MSIHANDLE install)
     CATCH_LOG();
 
     // Failures in this method aren't fatal.
+
+    return NOERROR;
+}
+
+static void SetWslServiceStartType(DWORD StartType)
+{
+    const wil::unique_schandle manager{OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT)};
+    THROW_LAST_ERROR_IF(!manager);
+
+    const wil::unique_schandle service{OpenServiceW(manager.get(), L"WSLService", SERVICE_CHANGE_CONFIG)};
+    if (!service)
+    {
+        const auto error = GetLastError();
+        if (error == ERROR_SERVICE_DOES_NOT_EXIST)
+        {
+            return;
+        }
+        THROW_WIN32(error);
+    }
+
+    THROW_IF_WIN32_BOOL_FALSE(ChangeServiceConfigW(
+        service.get(), SERVICE_NO_CHANGE, StartType, SERVICE_NO_CHANGE, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr));
+}
+
+extern "C" UINT __stdcall DisableWslService(MSIHANDLE install)
+{
+    try
+    {
+        WSL_INSTALL_LOG("DisableWslService");
+        SetWslServiceStartType(SERVICE_DISABLED);
+    }
+    CATCH_LOG();
+
+    return NOERROR;
+}
+
+extern "C" UINT __stdcall EnableWslService(MSIHANDLE install)
+{
+    try
+    {
+        WSL_INSTALL_LOG("EnableWslService");
+        SetWslServiceStartType(SERVICE_AUTO_START);
+    }
+    CATCH_LOG();
 
     return NOERROR;
 }

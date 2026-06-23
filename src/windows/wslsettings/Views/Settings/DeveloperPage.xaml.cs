@@ -27,6 +27,16 @@ public sealed partial class DeveloperPage : Page
                 FrameworkElementAutomationPeer.FromElement(Settings_ErrorTryAgainLater).RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
             }
         });
+
+        this.Loaded += OnPageLoaded;
+    }
+
+    private void OnPageLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        DeveloperPageRoot.Focus(FocusState.Programmatic);
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "CustomKernelPathExpander", "CustomKernelPathTextBox");
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "CustomKernelModulesPathExpander", "CustomKernelModulesPathTextBox");
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "CustomSystemDistroPathExpander", "CustomSystemDistroPathTextBox");
     }
 
     override protected void OnNavigatedFrom(NavigationEventArgs e)

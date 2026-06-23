@@ -73,7 +73,7 @@ inline bool operator<(const SOCKADDR_INET& lhs, const SOCKADDR_INET& rhs) noexce
             return lhs.Ipv4.sin_addr.S_un.S_addr < rhs.Ipv4.sin_addr.S_un.S_addr;
         }
 
-        // implmenting the comparison operation following the shortcut from mstcpip.h IN6_ADDR_EQUAL
+        // implementing the comparison operation following the shortcut from mstcpip.h IN6_ADDR_EQUAL
         const __int64 UNALIGNED* lhsRawPointer = (__int64 UNALIGNED*)(&lhs.Ipv6.sin6_addr);
         const __int64 UNALIGNED* rhsRawPointer = (__int64 UNALIGNED*)(&rhs.Ipv6.sin6_addr);
         if (lhsRawPointer[0] == rhsRawPointer[0])
@@ -94,7 +94,7 @@ inline bool operator>(const SOCKADDR_INET& lhs, const SOCKADDR_INET& rhs) noexce
             return lhs.Ipv4.sin_addr.S_un.S_addr > rhs.Ipv4.sin_addr.S_un.S_addr;
         }
 
-        // implmenting the comparison operation following the shortcut from mstcpip.h IN6_ADDR_EQUAL
+        // implementing the comparison operation following the shortcut from mstcpip.h IN6_ADDR_EQUAL
         const __int64 UNALIGNED* lhsRawPointer = (__int64 UNALIGNED*)(&lhs.Ipv6.sin6_addr);
         const __int64 UNALIGNED* rhsRawPointer = (__int64 UNALIGNED*)(&rhs.Ipv6.sin6_addr);
         if (lhsRawPointer[0] == rhsRawPointer[0])
@@ -148,17 +148,31 @@ using unique_address_table = wil::unique_any<PMIB_UNICASTIPADDRESS_TABLE, declty
 using unique_forward_table = wil::unique_any<PMIB_IPFORWARD_TABLE2, decltype(FreeMibTable), &FreeMibTable>;
 using unique_ifstack_table = wil::unique_any<PMIB_IFSTACK_TABLE, decltype(FreeMibTable), &FreeMibTable>;
 
+// Ensures COM is initialized on the current thread. Tolerates the case where
+// COM is already initialized (even with a different apartment type or security) since this
+// can happen on RPC threads or callback threads.
 inline wil::unique_couninitialize_call InitializeCOMState()
 {
-    // Ensure COM is initialized
-    auto coInit = wil::CoInitializeEx(COINIT_MULTITHREADED);
-    HRESULT hr = CoInitializeSecurity(
-        nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_STATIC_CLOAKING, nullptr);
-    // Ignore error if CoInitializeSecurity has already been invoked
-    if (hr == RPC_E_TOO_LATE)
+    wil::unique_couninitialize_call coInit;
+    auto hr = ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (SUCCEEDED(hr))
     {
+        // Ignore error if CoInitializeSecurity has already been invoked
+        hr = CoInitializeSecurity(
+            nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_STATIC_CLOAKING, nullptr);
+
+        if (hr == RPC_E_TOO_LATE)
+        {
+            hr = S_OK;
+        }
+    }
+    else if (hr == RPC_E_CHANGED_MODE)
+    {
+        // COM already initialized by someone else - disarm so we don't uninitialize their COM
+        coInit.release();
         hr = S_OK;
     }
+
     THROW_IF_FAILED(hr);
     return coInit;
 }
@@ -457,6 +471,11 @@ std::vector<wsl::core::networking::CurrentInterfaceInformation> EnumerateConnect
 bool IsMetered(ABI::Windows::Networking::Connectivity::NetworkCostType cost) noexcept;
 
 /// <summary>
+/// Gets the minimum MTU across all connected network interfaces.
+/// </summary>
+std::optional<ULONG> GetMinimumConnectedInterfaceMtu() noexcept;
+
+/// <summary>
 /// This instance acts as an IP_ADAPTER_ADDRESS pointer.
 /// </summary>
 class AdapterAddresses;
@@ -539,13 +558,13 @@ private:
             m_buffer.resize(BufferSize);
             Result = GetAdaptersAddresses(
                 AF_UNSPEC,
-                (GAA_FLAG_SKIP_FRIENDLY_NAME | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST),
+                (GAA_FLAG_SKIP_FRIENDLY_NAME | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_INCLUDE_GATEWAYS),
                 nullptr,
                 (PIP_ADAPTER_ADDRESSES)m_buffer.data(),
                 &BufferSize);
         } while (Result == ERROR_BUFFER_OVERFLOW);
 
-        THROW_LAST_ERROR_IF_MSG((Result != ERROR_SUCCESS), "GetAdpatersAddresses");
+        THROW_LAST_ERROR_IF_MSG((Result != ERROR_SUCCESS), "GetAdaptersAddresses");
         m_buffer.resize(BufferSize);
         auto AddressBuffer = (PIP_ADAPTER_ADDRESSES)m_buffer.data();
         std::vector<IpAdapterAddress> addresses;

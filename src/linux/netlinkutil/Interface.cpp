@@ -73,7 +73,7 @@ void Interface::ChangeAddress(const Address& address, const std::optional<Addres
     }
 }
 
-// TMessage must be drived from AddressMessage or one of its children
+// TMessage must be derived from AddressMessage or one of its children
 template <typename TAddr, typename TMessage>
 void Interface::ChangeAddressImpl(const Address& address, const std::optional<Address>& broadcastAddress, Operation operation)
 {
@@ -356,7 +356,7 @@ void Interface::SetActiveChild(const Interface& child_interface)
 void Interface::CreateTunTapAdapter(const std::string& name, bool TunAdapter)
 {
     wil::unique_fd fd;
-    if (name.size() > IFNAMSIZ)
+    if (name.size() >= IFNAMSIZ)
     {
         throw RuntimeErrorWithSourceLocation("Tun adapter name exceeds IFNAMSIZ");
     }
@@ -644,7 +644,7 @@ void Interface::EnableNetworkSetting(const char* settingName, int addressFamily)
 
     wil::unique_fd fd(Syscall(open, settingFilePath.c_str(), (O_WRONLY | O_CLOEXEC)));
 
-    Syscall(write, fd.get(), c_value1, sizeof(c_value1));
+    Syscall(write, fd.get(), c_value1, sizeof(c_value1) - 1);
 }
 
 void Interface::DisableNetworkSetting(const char* settingName, int addressFamily)
@@ -654,7 +654,7 @@ void Interface::DisableNetworkSetting(const char* settingName, int addressFamily
 
     wil::unique_fd fd(Syscall(open, settingFilePath.c_str(), (O_WRONLY | O_CLOEXEC)));
 
-    Syscall(write, fd.get(), c_value0, sizeof(c_value0));
+    Syscall(write, fd.get(), c_value0, sizeof(c_value0) - 1);
 }
 
 void Interface::ResetIpv6State()

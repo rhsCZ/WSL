@@ -27,6 +27,17 @@ public sealed partial class MemAndProcPage : Page
                 FrameworkElementAutomationPeer.FromElement(Settings_ErrorTryAgainLater).RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
             }
         });
+
+        this.Loaded += OnPageLoaded;
+    }
+
+    private void OnPageLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        MemAndProcPageRoot.Focus(FocusState.Programmatic);
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "ProcCountExpander", "ProcCountTextBox");
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "MemorySizeExpander", "MemorySizeTextBox");
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "SwapSizeExpander", "SwapSizeTextBox");
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "SwapFilePathExpander", "SwapFilePathTextBox");
     }
 
     override protected void OnNavigatedFrom(NavigationEventArgs e)
@@ -41,7 +52,7 @@ public sealed partial class MemAndProcPage : Page
             return;
         }
 
-        RuntimeHelper.TryMoveFocusPrevousControl(sender as Button);
+        RuntimeHelper.TryMoveFocusPreviousControl(sender as Button);
     }
 
     public async void SwapFilePath_Click(object sender, RoutedEventArgs e)

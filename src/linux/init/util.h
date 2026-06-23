@@ -28,13 +28,15 @@ Abstract:
 #include <future>
 #include <filesystem>
 #include <vector>
+#include <source_location>
 #include "lxinitshared.h"
 #include "lxdef.h"
 #include "common.h"
 
 namespace wsl::shared {
 class SocketChannel;
-}
+class Transaction;
+} // namespace wsl::shared
 
 namespace wsl::linux {
 struct WslDistributionConfig;
@@ -116,7 +118,7 @@ private:
     wil::unique_fd m_InteropSocket;
 };
 
-int UtilAcceptVsock(int SocketFd, sockaddr_vm Address, int Timeout = -1);
+int UtilAcceptVsock(int SocketFd, sockaddr_vm Address, int Timeout = -1, int SocketFlags = SOCK_CLOEXEC);
 
 int UtilBindVsockAnyPort(struct sockaddr_vm* SocketAddress, int Type);
 
@@ -128,7 +130,8 @@ wil::unique_fd UtilConnectToInteropServer(std::optional<pid_t> Pid = {});
 
 wil::unique_fd UtilConnectUnix(const char* Path);
 
-wil::unique_fd UtilConnectVsock(unsigned int Port, bool CloseOnExec, std::optional<int> SocketBuffer = {}) noexcept;
+wil::unique_fd UtilConnectVsock(
+    unsigned int Port, bool CloseOnExec, std::optional<int> SocketBuffer = {}, const std::source_location& Source = std::source_location::current()) noexcept;
 
 // Needs to be declared before UtilCreateChildProcess().
 void UtilSetThreadName(const char* Name);
@@ -189,7 +192,8 @@ Return Value:
     _exit(1);
 }
 
-int UtilCreateProcessAndWait(const char* File, const char* const Argv[], int* Status = nullptr, const std::map<std::string, std::string>& Env = {});
+int UtilCreateProcessAndWait(
+    const char* File, const char* const Argv[], int* Status = nullptr, const std::map<std::string, std::string>& Env = {}, bool DetachTerminal = false);
 
 template <typename TMethod>
 void UtilCreateWorkerThread(const char* Name, TMethod&& ThreadFunction)
@@ -221,11 +225,15 @@ std::optional<std::string> UtilGetEnv(const char* Name, char* Environment);
 
 std::string UtilGetEnvironmentVariable(const char* Name);
 
-int UtilGetFeatureFlags(const wsl::linux::WslDistributionConfig& Config);
+int UtilGetFeatureFlags();
+
+void UtilSetFeatureFlags(int FeatureFlags, bool UpdateEnv = true);
 
 std::optional<LX_MINI_INIT_NETWORKING_MODE> UtilGetNetworkingMode(void);
 
 pid_t UtilGetPpid(pid_t Pid);
+
+std::string UtilGetVmId(void);
 
 void UtilInitGroups(const char* User, gid_t Gid);
 
@@ -243,6 +251,8 @@ int UtilMkdir(const char* Path, mode_t Mode);
 
 int UtilMkdirPath(const char* Path, mode_t Mode, bool SkipLast = false);
 
+int UtilMountFile(const char* Source, const char* Destination);
+
 int UtilMount(const char* Source, const char* Target, const char* Type, unsigned long MountFlags, const char* Options, std::optional<std::chrono::seconds> TimeoutSeconds = {});
 
 int UtilMountOverlayFs(const char* Target, const char* Lower, unsigned long MountFlags = 0, std::optional<std::chrono::seconds> TimeoutSeconds = {});
@@ -252,8 +262,6 @@ int UtilOpenMountNamespace(void);
 int UtilParseCgroupsLine(char* Line, char** SubsystemName, bool* Enabled);
 
 std::string UtilParsePlan9MountSource(std::string_view MountOptions);
-
-std::string UtilParseVirtiofsMountSource(std::string_view MountOptions);
 
 std::vector<char> UtilParseWslEnv(char* NtEnvironment);
 
@@ -303,8 +311,22 @@ std::wstring UtilReadFileContentW(std::string_view path);
 
 std::string UtilReadFileContent(std::string_view path);
 
+// Holds the hv_pci swiotlb pool the WSL kernel reserved at boot and published
+// under /sys/bus/vmbus/drivers/hv_pci/swiotlb_{base,size}. Both fields are zero
+// when running on a kernel that does not publish these files.
+struct HvPciSwiotlbPool
+{
+    uint64_t Base = 0;
+    uint64_t Size = 0;
+};
+
+HvPciSwiotlbPool UtilReadHvPciSwiotlbPool();
+
 uint16_t UtilWinAfToLinuxAf(uint16_t AddressFamily);
 
-int WriteToFile(const char* Path, const char* Content, int permissions = 0644);
+int WriteToFile(const char* Path, const char* Content, int OpenFlags = O_WRONLY | O_CLOEXEC | O_CREAT, int Permissions = 0644);
 
-int ProcessCreateProcessMessage(wsl::shared::SocketChannel& channel, gsl::span<gsl::byte> Buffer);
+// Starts a background thread that performs memory compaction and optional cache reclaim when the VM is idle.
+void StartMemoryReductionThread(LX_MINI_INIT_MEMORY_RECLAIM_MODE Mode);
+
+int ProcessCreateProcessMessage(wsl::shared::Transaction& Transaction, gsl::span<gsl::byte> Buffer);

@@ -18,6 +18,7 @@ Abstract:
 #include "WslCoreFilesystem.h"
 #include "LxssIpTables.h"
 #include "LxssUserSessionFactory.h"
+#include "WSLCSessionManagerFactory.h"
 #include <ctime>
 
 using namespace wsl::windows::common::registry;
@@ -28,8 +29,13 @@ using namespace wsl::windows::policies;
 bool g_lxcoreInitialized{false};
 wil::unique_event g_networkingReady{wil::EventOptions::ManualReset};
 
+wsl::windows::service::PluginManager g_pluginManager;
+
 // Declare the LxssUserSession COM class.
 CoCreatableClassWrlCreatorMapInclude(LxssUserSession);
+
+// Declare the WSLCSessionManager COM class.
+CoCreatableClassWrlCreatorMapInclude(WSLCSessionManager);
 
 struct WslServiceSecurityPolicy
 {
@@ -158,7 +164,7 @@ try
     ConfigureCrt();
 
     // Enable contextualized errors
-    wsl::windows::common::EnableContextualizedErrors(true);
+    wsl::windows::common::EnableContextualizedErrors(true, false, true);
 
     // Initialize telemetry.
     WslTraceLoggingInitialize(WslServiceTelemetryProvider, !wsl::shared::OfficialBuild);
@@ -170,12 +176,12 @@ try
 
     wsl::windows::common::security::ApplyProcessMitigationPolicies();
 
-    // Ensure that the OS has support for running lifted WSL.
-    THROW_HR_IF(HRESULT_FROM_WIN32(ERROR_SERVICE_DISABLED), !wsl::windows::common::helpers::IsWslSupportInterfacePresent());
-
     // Initialize Winsock.
     WSADATA Data;
     THROW_IF_WIN32_ERROR(WSAStartup(MAKEWORD(2, 2), &Data));
+
+    // Load plugins.
+    g_pluginManager.LoadPlugins();
 
     // Check if WSL is disabled via policy and set up a registry watcher to watch for changes.
     //
@@ -189,6 +195,9 @@ try
     });
 
     EvaluateWslPolicy();
+
+    wsl::windows::common::helpers::RegisterWithDcat();
+
     return S_OK;
 }
 CATCH_RETURN()
@@ -240,6 +249,9 @@ void WslService::ServiceStopped()
     // Terminate all user sessions.
     ClearSessionsAndBlockNewInstances();
 
+    // Also tear down WSLC sessions.
+    wsl::windows::service::wslc::ClearWslcSessionsAndBlockNewInstances();
+
     // Disconnect from the LxCore driver.
     if (g_lxcoreInitialized)
     {
@@ -253,7 +265,7 @@ void WslService::ServiceStopped()
     // Tear down telemetry.
     WslTraceLoggingUninitialize();
 
-    // unitialize COM. This must be done here because this call can cause cleanups that will be fail
+    // uninitialize COM. This must be done here because this call can cause cleanups that will be fail
     // if the CRT is shutting down.
     m_coInit.reset();
 }
@@ -285,7 +297,7 @@ CATCH_LOG()
 void WslService::CheckForUpdates(_Inout_ PTP_CALLBACK_INSTANCE, _Inout_ PVOID Context, _Inout_ PTP_TIMER)
 try
 {
-    auto [version, _] = GetLatestGithubRelease(false);
+    auto [version, _] = GetLatestGitHubRelease(false);
     if (ParseWslPackageVersion(version) > ParseWslPackageVersion(TEXT(WSL_PACKAGE_VERSION)))
     {
         WSL_LOG("WSL Package update is available", TraceLoggingLevel(WINEVENT_LEVEL_INFO));
@@ -294,7 +306,7 @@ try
         SetThreadpoolTimer(static_cast<WslService*>(Context)->m_updateCheckTimer.get(), nullptr, 0, 0);
 
         // Get current release date
-        std::wstring currentReleaseCreatedAtDate = GetGithubReleaseByTag(TEXT(WSL_PACKAGE_VERSION)).created_at;
+        std::wstring currentReleaseCreatedAtDate = GetGitHubReleaseByTag(TEXT(WSL_PACKAGE_VERSION)).created_at;
 
         std::tm tm = {};
         std::wstring dateTimeFormat = L"%Y-%m-%dT%H:%M:%SZ";

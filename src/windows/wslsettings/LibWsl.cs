@@ -31,7 +31,7 @@ namespace LibWsl
         AutoProxyEnabled = 11,
         InitialAutoProxyTimeout = 12,
         DNSProxyEnabled = 13,
-        DNSTunellingEnabled = 14,
+        DNSTunnelingEnabled = 14,
         BestEffortDNSParsingEnabled = 15,
         AutoMemoryReclaim = 16,
         GUIApplicationsEnabled = 17,
@@ -52,7 +52,7 @@ namespace LibWsl
         Nat = 1,
         Bridged = 2,
         Mirrored = 3,
-        VirtioProxy = 4
+        Consomme = 4
     }
 
     public enum MemoryReclaimMode
@@ -80,7 +80,7 @@ namespace LibWsl
 
         internal static bool __TryGetNativeToManagedMapping(IntPtr native, out global::LibWsl.WslConfig managed)
         {
-    
+
             return NativeToManagedMap.TryGetValue(native, out managed);
         }
 
@@ -171,7 +171,7 @@ namespace LibWsl
 
         internal static bool __TryGetNativeToManagedMapping(IntPtr native, out global::LibWsl.WslConfigSetting managed)
         {
-    
+
             return NativeToManagedMap.TryGetValue(native, out managed);
         }
 

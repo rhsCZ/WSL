@@ -19,12 +19,15 @@ Abstract:
 class WslInstall
 {
 public:
+    static inline LPCWSTR c_optionalFeatureNameVmp = L"VirtualMachinePlatform";
+    static inline LPCWSTR c_optionalFeatureNameWsl = L"Microsoft-Windows-Subsystem-Linux";
+
     struct InstallResult
     {
         std::wstring Name;
         std::optional<GUID> Id;
         std::optional<wsl::windows::common::distribution::TDistribution> Distribution;
-        bool InstalledViaGithub{};
+        bool InstalledViaGitHub{};
         bool Alreadyinstalled{};
     };
 
@@ -40,9 +43,11 @@ public:
         _In_ const std::optional<std::wstring>& location,
         _In_ const std::optional<uint64_t>& vhdSize);
 
-    static std::vector<std::wstring> CheckForMissingOptionalComponents(_In_ bool requireWslOptionalComponent);
+    static std::pair<bool, std::vector<std::wstring>> CheckForMissingOptionalComponents(_In_ bool requireWslOptionalComponent);
 
     static void InstallOptionalComponents(const std::vector<std::wstring>& components);
+
+    static DWORD InstallOptionalComponent(LPCWSTR component, bool consoleOutput);
 
     static std::pair<std::wstring, GUID> InstallModernDistribution(
         const wsl::windows::common::distribution::ModernDistributionVersion& distribution,

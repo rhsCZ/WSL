@@ -149,7 +149,7 @@ void LxtFsUtimeRoundToNt(struct timespec* Timespec);
 
 //
 // All real timestamps are offset from the year 2000 because FAT can only
-// accept timestamps afer 1980.
+// accept timestamps after 1980.
 
 BASIC_TEST_CASE BasicTestCases[] = {
     {{{FS_UNIX_TIME_2000 + 1111111, 2222222}, {FS_UNIX_TIME_2000 + 3333333, 4444444}},
@@ -231,7 +231,7 @@ Return Value:
         }
 
         snprintf(ExpectedOptions, sizeof(ExpectedOptions), "rw,%s", Options);
-        snprintf(ExpectedCombinedOptions, sizeof(ExpectedOptions), "rw,noatime,%s", Options);
+        snprintf(ExpectedCombinedOptions, sizeof(ExpectedCombinedOptions), "rw,noatime,%s", Options);
 
         LxtCheckResult(MountCheckIsMount(Target, ParentId, Source, "drvfs", MountRoot, "rw,noatime", ExpectedOptions, ExpectedCombinedOptions, 0));
     }
@@ -285,7 +285,7 @@ Return Value:
             snprintf(
                 Plan9Options,
                 sizeof(Plan9Options),
-                "aname=drvfs;path=%s%s;symlinkroot=/mnt/,cache=5,access=client,msize=262144,trans=virtio",
+                "aname=drvfs;path=%s%s;symlinkroot=/mnt/,cache=0x5,access=client,msize=262144,trans=virtio",
                 Plan9Source,
                 Temp);
         }
@@ -294,7 +294,7 @@ Return Value:
             snprintf(
                 Plan9Options,
                 sizeof(Plan9Options),
-                "aname=drvfs;path=%s%s;symlinkroot=/mnt/,cache=5,access=client,msize=65536,trans=fd,rfd=4,wfd=4",
+                "aname=drvfs;path=%s%s;symlinkroot=/mnt/,cache=0x5,access=client,msize=65536,trans=fd,rfd=*,wfd=*",
                 Plan9Source,
                 Temp);
         }
@@ -444,13 +444,18 @@ Return Value:
     //
     // Try to chdir to the parent.
     //
+    // N.B. This currently doesn't work on virtiofs.
+    //
 
-    LxtCheckErrnoZeroSuccess(chdir(".."));
-    LxtCheckErrno(LxtGetcwd(Path, sizeof(Path)));
-    LxtCheckStringEqual(Path, BaseDir);
-    memset(Path, 0, sizeof(Path));
-    LxtCheckErrno(readlink(FS_PROC_SELF_CWD, Path, sizeof(Path)));
-    LxtCheckStringEqual(Path, BaseDir);
+    if (g_LxtFsInfo.FsType != LxtFsTypeVirtioFs)
+    {
+        LxtCheckErrnoZeroSuccess(chdir(".."));
+        LxtCheckErrno(LxtGetcwd(Path, sizeof(Path)));
+        LxtCheckStringEqual(Path, BaseDir);
+        memset(Path, 0, sizeof(Path));
+        LxtCheckErrno(readlink(FS_PROC_SELF_CWD, Path, sizeof(Path)));
+        LxtCheckStringEqual(Path, BaseDir);
+    }
 
     //
     // Try to chdir back to the deleted directory.
@@ -1875,7 +1880,7 @@ Return Value:
     LxtCheckErrnoZeroSuccess(rename(RenameTestDirChild, RenameTestDir2));
 
     //
-    // Renaming to a non-existant directory where the target directory
+    // Renaming to a non-existent directory where the target directory
     // contains trailing slash(es).
     //
 
@@ -1906,7 +1911,7 @@ Return Value:
     //
     // The following test cases deal with the old name containing a trailing slash.
     //
-    // Renaming a directory to a nonexistant directory should succeed.
+    // Renaming a directory to a nonexistent directory should succeed.
     //
 
     LxtCheckErrnoZeroSuccess(mkdir(RenameTestDirSlash, 0777));
@@ -2051,7 +2056,7 @@ Arguments:
     DrvFsDir - Supplies the DrvFs directory to use for testing. This must
         start with a slash, and be relative from the root of the DrvFs mount.
 
-    UseDrvFs - Supplies a pa value indicating whether DrvFs is being used.
+    UseDrvFs - Supplies a value indicating whether DrvFs is being used.
 
 Return Value:
 
@@ -2226,7 +2231,12 @@ Return Value:
 
     if (LxtFsTimestampDiff(Timestamp1, Timestamp2) <= 0)
     {
-        LxtLogError("Time %lld.%.9ld not greater than time %lld.%.9ld", Timestamp1, Timestamp2);
+        LxtLogError(
+            "Time %lld.%.9ld not greater than time %lld.%.9ld",
+            (long long)Timestamp1->tv_sec,
+            (long)Timestamp1->tv_nsec,
+            (long long)Timestamp2->tv_sec,
+            (long)Timestamp2->tv_nsec);
 
         Result = LXT_RESULT_FAILURE;
         goto ErrorExit;
@@ -3350,7 +3360,6 @@ Return Value:
     FullExpectedTime = (Expected->tv_sec * FS_NS_PER_SEC) + Expected->tv_nsec;
     if ((FullTime <= FullExpectedTime) && (FullTime >= (FullExpectedTime - (AllowedVarianceSeconds * FS_NS_PER_SEC))))
     {
-
         return true;
     }
 
@@ -3359,9 +3368,9 @@ Return Value:
     // the host and guest.
     //
 
-    if ((g_LxtFsInfo.FsType == LxtFsTypePlan9) && (FullTime <= (FullExpectedTime + (AllowedVarianceSeconds * FS_NS_PER_SEC))))
+    if (((g_LxtFsInfo.FsType == LxtFsTypePlan9) || (g_LxtFsInfo.FsType == LxtFsTypeVirtioFs)) &&
+        (FullTime <= (FullExpectedTime + (AllowedVarianceSeconds * FS_NS_PER_SEC))))
     {
-
         return true;
     }
 
@@ -3403,7 +3412,7 @@ Return Value:
 
     //
     // When using the current time, there is a slight chance of this test
-    // failing when the time the file was set to and the time when the check
+    // failing when the time set for the file and the time when the check
     // is done straddle midnight.
     //
 
@@ -3648,8 +3657,6 @@ Return Value:
     // Test an invalid buffer after a valid buffer. The writev call should return the
     // number of bytes written until the invalid buffer.
     //
-    // N.B. The plan 9 client does not follow this behavior, and will write nothing.
-    //
 
     LxtCheckErrno(FileDescriptor = open(TestFile, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU));
     memset(Iov, 0, sizeof(Iov));
@@ -3660,23 +3667,16 @@ Return Value:
     Iov[2].iov_base = ContentB;
     Iov[2].iov_len = sizeof(ContentB);
     LxtLogInfo("%d", g_LxtFsInfo.FsType);
-    if (g_LxtFsInfo.FsType == LxtFsTypePlan9)
-    {
-        LxtCheckErrnoFailure(Bytes = writev(FileDescriptor, Iov, 3), EFAULT);
-    }
-    else
-    {
-        LxtCheckErrno(Bytes = writev(FileDescriptor, Iov, 3));
-        LxtCheckEqual(Bytes, sizeof(ContentA), "%d");
-        LxtCheckErrno(close(FileDescriptor));
+    LxtCheckErrno(Bytes = writev(FileDescriptor, Iov, 3));
+    LxtCheckEqual(Bytes, sizeof(ContentA), "%d");
+    LxtCheckErrno(close(FileDescriptor));
 
-        LxtCheckErrno(FileDescriptor = open(TestFile, O_RDWR, S_IRWXU));
-        memset(Buffer, 0, sizeof(Buffer));
-        LxtCheckErrno(Bytes = read(FileDescriptor, Buffer, sizeof(ContentA)));
-        LxtCheckEqual(Bytes, sizeof(ContentA), "%d");
-        LxtCheckErrno(Bytes = read(FileDescriptor, Buffer, sizeof(ContentB)));
-        LxtCheckEqual(Bytes, 0, "%d");
-    }
+    LxtCheckErrno(FileDescriptor = open(TestFile, O_RDWR, S_IRWXU));
+    memset(Buffer, 0, sizeof(Buffer));
+    LxtCheckErrno(Bytes = read(FileDescriptor, Buffer, sizeof(ContentA)));
+    LxtCheckEqual(Bytes, sizeof(ContentA), "%d");
+    LxtCheckErrno(Bytes = read(FileDescriptor, Buffer, sizeof(ContentB)));
+    LxtCheckEqual(Bytes, 0, "%d");
 
     Result = LXT_RESULT_SUCCESS;
 
@@ -3751,7 +3751,7 @@ Return Value:
     {
         LxtLogError(
             "getdents should return 0 when end of directory is reached, "
-            "but it retuend: %d.",
+            "but it returned: %d.",
             Size);
 
         Result = EINVAL;

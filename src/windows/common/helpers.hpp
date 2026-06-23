@@ -62,7 +62,8 @@ enum class LaunchWslRelayFlags
 {
     None = 0,
     DisableTelemetry = 1,
-    HideWindow = 2
+    HideWindow = 2,
+    ConnectPipe = 4
 };
 
 DEFINE_ENUM_FLAG_OPERATORS(LaunchWslRelayFlags);
@@ -115,9 +116,9 @@ std::wstring_view ConsumeArgument(_In_ std::wstring_view CommandLine, _In_ std::
 
 void CreateConsole(_In_ LPCWSTR ConsoleTitle = nullptr);
 
-unique_proc_attribute_list CreateProcThreadAttributeList(_In_ DWORD AttributeCount);
+[[nodiscard]] wil::unique_handle CreateKillOnCloseJob();
 
-[[nodiscard]] HANDLE DuplicateHandle(_In_ HANDLE Handle, _In_ DWORD DesiredAccess = 0, _In_ BOOL InheritHandle = FALSE, _In_ DWORD Options = DUPLICATE_SAME_ACCESS);
+unique_proc_attribute_list CreateProcThreadAttributeList(_In_ DWORD AttributeCount);
 
 std::vector<gsl::byte> GenerateConfigurationMessage(
     _In_ const std::wstring& DistributionName,
@@ -154,13 +155,20 @@ bool IsPackageInstalled(_In_ LPCWSTR PackageFamilyName);
 
 bool IsServicePresent(_In_ LPCWSTR ServiceName);
 
+bool IsServiceRunning(_In_ LPCWSTR ServiceName);
+
+bool IsVirtioSerialConsoleSupported();
+
+bool IsVmemmSuffixSupported();
+
 bool IsWindows11OrAbove();
 
 bool IsWslOptionalComponentPresent();
 
 bool IsWslSupportInterfacePresent();
 
-void LaunchDebugConsole(_In_ LPCWSTR PipeName, _In_ bool ConnectExistingPipe, _In_ HANDLE UserToken, _In_opt_ HANDLE LogFile, _In_ bool DisableTelemetry);
+void LaunchDebugConsole(
+    _In_ LPCWSTR PipeName, _In_ bool ConnectExistingPipe, _In_ HANDLE UserToken, _In_opt_ HANDLE LogFile, _In_ bool DisableTelemetry, _In_opt_ HANDLE JobObject = nullptr);
 
 [[nodiscard]] wil::unique_handle LaunchInteropServer(
     _In_opt_ LPCGUID DistroId,
@@ -168,11 +176,12 @@ void LaunchDebugConsole(_In_ LPCWSTR PipeName, _In_ bool ConnectExistingPipe, _I
     _In_opt_ HANDLE EventHandle,
     _In_opt_ HANDLE ParentHandle,
     _In_opt_ LPCGUID VmId,
-    _In_opt_ HANDLE UserToken = nullptr);
+    _In_opt_ HANDLE UserToken = nullptr,
+    _In_opt_ HANDLE JobObject = nullptr);
 
-void LaunchKdRelay(_In_ LPCWSTR PipeName, _In_ HANDLE UserToken, _In_ int Port, _In_ HANDLE ExitEvent, _In_ bool DisableTelemetry);
+void LaunchKdRelay(_In_ LPCWSTR PipeName, _In_ HANDLE UserToken, _In_ int Port, _In_ HANDLE ExitEvent, _In_ bool DisableTelemetry, _In_opt_ HANDLE JobObject = nullptr);
 
-void LaunchPortRelay(_In_ SOCKET Socket, _In_ const GUID& VmId, _In_ HANDLE UserToken, _In_ bool DisableTelemetry);
+void LaunchPortRelay(_In_ SOCKET Socket, _In_ const GUID& VmId, _In_ HANDLE UserToken, _In_ bool DisableTelemetry, _In_opt_ HANDLE JobObject = nullptr);
 
 void LaunchWslSettingsOOBE(_In_ HANDLE UserToken);
 
@@ -193,5 +202,11 @@ DWORD RunProcess(_Inout_ std::wstring& CommandLine);
 void SetHandleInheritable(_In_ HANDLE Handle, _In_ bool Inheritable = true);
 
 bool TryAttachConsole();
+
+void RegisterWithDcat(_In_ bool IncludeVersionNumber = true);
+
+void AppendCommonKernelCommandLine(_Inout_ std::wstring& kernelCmdLine, _In_ int pageReportingOrder, _In_ ULONG64 swiotlbSizeBytes);
+
+UINT64 ComputeDefaultSwiotlbConfig(_In_ UINT64 memoryBytes);
 
 } // namespace wsl::windows::common::helpers

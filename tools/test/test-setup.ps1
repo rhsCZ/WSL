@@ -59,7 +59,13 @@ if ($Package) {
             )
 
         $exitCode = (Start-Process -Wait "msiexec.exe" -ArgumentList $MSIArguments -NoNewWindow -PassThru).ExitCode
-        if ($exitCode -Ne 0)
+        # 1605 means that ProductCode was not present on the system
+        if ($exitCode -Eq 1605)
+        {
+            Write-Host "MSI product $($installedMsi.ProductCode) was not found, registry HKLM:Software\Microsoft\Windows\CurrentVersion\Lxss\MSI appears to have been leaked."
+            exit 1
+        }
+        elseif ($exitCode -Ne 0)
         {
             Write-Host "Failed to remove package: $exitCode"
             exit 1
@@ -71,23 +77,41 @@ if ($Package) {
     try {
         if ($AllowUnsigned)
         {
-            # unfortunately -AllowUnsigned isn't supported on vb so we need to manually import the certificate and trust it.
-            (Get-AuthenticodeSignature $Package).SignerCertificate | Export-Certificate -FilePath private-wsl.cert | Out-Null
-            try
-            {
-                Import-Certificate -FilePath .\private-wsl.cert -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+            # Try to add with -AllowUnsigned first (supported in newer PowerShell)
+            try {
+                Add-AppxPackage $Package -AllowUnsigned -ErrorAction Stop
             }
-            finally
-            {
-                Remove-Item -Path .\private-wsl.cert
+            catch {
+                # Fallback: manually import the certificate and trust it
+                Write-Host "Attempting to import package certificate..."
+                $signature = Get-AuthenticodeSignature -LiteralPath $Package
+                if (-not $signature.SignerCertificate) {
+                    Write-Error "Package is not signed or has no certificate. Cannot import certificate."
+                    exit 1
+                }
+
+                $cert = $signature.SignerCertificate
+                $certPath = Join-Path $env:TEMP "wsl-package-cert.cer"
+                try {
+                    $cert | Export-Certificate -FilePath $certPath | Out-Null
+                    Import-Certificate -FilePath $certPath -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+                    Write-Host "Certificate imported successfully. Retrying package installation..."
+                }
+                finally {
+                    Remove-Item -Path $certPath -ErrorAction SilentlyContinue
+                }
+
+                # Retry installation after importing certificate
+                Add-AppxPackage $Package -ErrorAction Stop
             }
         }
-
-        Add-AppxPackage $Package
+        else {
+            Add-AppxPackage $Package -ErrorAction Stop
+        }
     }
     catch {
-        Write-Host $_
-        Get-AppPackageLog -All
+        Write-Host "Error installing package: $_"
+        Get-AppPackageLog | Select-Object -First 64 | Format-List
         exit 1
     }
 }
@@ -103,6 +127,7 @@ New-ItemProperty -Path $UserLxssRegistryPath -Name "OOBEComplete" -Value "1" -Pr
 
 if ($DistroPath)
 {
+    Write-Host "Importing distro $DistroName($Version) from $DistroPath"
     & wsl.exe --unregister "$DistroName" # Ignore non-zero return for this call
     Run { wsl.exe --import "$DistroName" "$env:LocalAppData\lxss" "$DistroPath" --version "$Version" }
     Run { wsl.exe --set-default "$DistroName" }

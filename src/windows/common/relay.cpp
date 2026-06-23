@@ -32,6 +32,36 @@ LARGE_INTEGER InitializeFileOffset(HANDLE File)
     return Offset;
 }
 
+void CancelPendingIo(auto Handle, OVERLAPPED& Overlapped)
+{
+    DWORD bytesTransferred{};
+    if (CancelIoEx((HANDLE)Handle, &Overlapped))
+    {
+        if constexpr (std::is_same_v<decltype(Handle), SOCKET>)
+        {
+            if (!WSAGetOverlappedResult(Handle, &Overlapped, &bytesTransferred, true, nullptr))
+            {
+                auto error = WSAGetLastError();
+                LOG_LAST_ERROR_IF(error != WSAECONNABORTED && error != WSA_OPERATION_ABORTED && error != WSAECONNRESET);
+            }
+        }
+        else
+        {
+            static_assert(std::is_same_v<decltype(Handle), HANDLE>);
+            if (!GetOverlappedResult(Handle, &Overlapped, &bytesTransferred, true))
+            {
+                auto error = GetLastError();
+                LOG_LAST_ERROR_IF(error != ERROR_CONNECTION_ABORTED && error != ERROR_OPERATION_ABORTED);
+            }
+        }
+    }
+    else
+    {
+        // ERROR_NOT_FOUND is returned if there was no IO to cancel.
+        LOG_LAST_ERROR_IF(GetLastError() != ERROR_NOT_FOUND);
+    }
+}
+
 } // namespace
 
 std::thread wsl::windows::common::relay::CreateThread(_In_ HANDLE InputHandle, _In_ HANDLE OutputHandle, _In_opt_ HANDLE ExitHandle, _In_ size_t BufferSize)
@@ -108,7 +138,7 @@ wsl::windows::common::relay::InterruptableRead(
             return 0;
         }
 
-        THROW_LAST_ERROR_IF(lastError != ERROR_IO_PENDING);
+        THROW_LAST_ERROR_IF_MSG(lastError != ERROR_IO_PENDING, "Handle: 0x%p", (void*)InputHandle);
 
         auto cancelRead = wil::scope_exit_log(WI_DIAGNOSTICS_INFO, [&] {
             CancelIoEx(InputHandle, Overlapped);
@@ -201,7 +231,7 @@ bool wsl::windows::common::relay::InterruptableWait(_In_ HANDLE WaitObject, _In_
     const DWORD waitResult = WaitForMultipleObjects(gsl::narrow_cast<DWORD>(waitObjects.size()), waitObjects.data(), FALSE, INFINITE);
     if (waitResult != WAIT_OBJECT_0)
     {
-        if (waitResult > WAIT_OBJECT_0 && waitResult <= WAIT_OBJECT_0 + waitObjects.size())
+        if (waitResult > WAIT_OBJECT_0 && waitResult < WAIT_OBJECT_0 + waitObjects.size())
         {
             return false;
         }
@@ -375,6 +405,30 @@ void wsl::windows::common::relay::BidirectionalRelay(_In_ HANDLE LeftHandle, _In
             THROW_HR_MSG(E_FAIL, "WaitForMultipleObjects %d", waitResult);
         }
     }
+}
+
+bool wsl::windows::common::relay::StandardInputRelay(HANDLE ConsoleHandle, HANDLE OutputHandle, std::function<void()>&& UpdateTerminalSize, HANDLE ExitEvent)
+{
+    try
+    {
+        if (GetFileType(ConsoleHandle) != FILE_TYPE_CHAR)
+        {
+            wsl::windows::common::relay::InterruptableRelay(ConsoleHandle, OutputHandle, ExitEvent);
+            return true;
+        }
+
+        MultiHandleWait io;
+
+        io.AddHandle(std::make_unique<io::RelayHandle<io::ReadConsoleHandle>>(ConsoleHandle, OutputHandle, std::move(UpdateTerminalSize)));
+
+        io.AddHandle(std::make_unique<io::EventHandle>(ExitEvent), MultiHandleWait::CancelOnCompleted | MultiHandleWait::NeedNotComplete);
+        io.Run({});
+
+        return true;
+    }
+    CATCH_LOG();
+
+    return false;
 }
 
 void wsl::windows::common::relay::SocketRelay(_In_ SOCKET LeftSocket, _In_ SOCKET RightSocket, _In_ size_t BufferSize)

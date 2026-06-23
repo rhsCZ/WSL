@@ -1,8 +1,10 @@
-name: Publish to Winget
+name: Publish to WinGet
 
 on:
   release:
     types: [released]
+
+permissions: {}
 
 jobs:
   publish:

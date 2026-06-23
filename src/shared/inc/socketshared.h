@@ -49,7 +49,7 @@ try
 #if defined(_MSC_VER)
         THROW_HR(E_UNEXPECTED);
 #elif defined(__GNUC__)
-        THROW_UNEXCEPTED();
+        THROW_UNEXPECTED();
 #endif
     }
 
@@ -60,7 +60,16 @@ try
 #if defined(_MSC_VER)
         THROW_HR_MSG(E_UNEXPECTED, "Unexpected message size: %llu", MessageSize);
 #elif defined(__GNUC__)
-        THROW_UNEXCEPTED();
+        THROW_UNEXPECTED();
+#endif
+    }
+
+    if (MessageSize > 16 * 1024 * 1024) // 16 MiB
+    {
+#if defined(_MSC_VER)
+        THROW_HR_MSG(E_UNEXPECTED, "Message size too large: %llu", MessageSize);
+#elif defined(__GNUC__)
+        THROW_UNEXPECTED();
 #endif
     }
 
@@ -80,6 +89,27 @@ try
 #endif
         if (BytesRead <= 0)
         {
+            const auto* Header = reinterpret_cast<const MESSAGE_HEADER*>(Buffer.data());
+
+#if defined(_MSC_VER)
+
+            LOG_HR_MSG(
+                E_UNEXPECTED,
+                "Socket closed while reading message. Size: %u, type: %i, id: %u",
+                Header->MessageSize,
+                Header->MessageType,
+                Header->TransactionId);
+
+#elif defined(__GNUC__)
+
+            LOG_ERROR(
+                "Socket closed while reading message. Size: {}, type: {}, id: {}",
+                Header->MessageSize,
+                Header->MessageType,
+                Header->TransactionId);
+
+#endif
+
             return {};
         }
 

@@ -54,9 +54,6 @@ Abstract:
 #include <cstdarg>
 #include "lxinitshared.h"
 #include "defs.h"
-#include "retryshared.h"
-#include "socketshared.h"
-#include "stringshared.h"
 
 #define ETC_FOLDER "/etc/"
 #define NAME_ENV "NAME"
@@ -141,15 +138,30 @@ auto LogImpl(int fd, const std::format_string<Args...>& format, Args&&... args)
 
 #define GNS_LOG_INFO(str, ...) \
     { \
-        LogImpl(g_TelemetryFd, "{}: {} - " str "\n", g_threadName.c_str(), __FUNCTION__, ##__VA_ARGS__); \
+        if (g_TelemetryFd != -1) \
+        { \
+            LogImpl(g_TelemetryFd, "{}: {} - " str "\n", g_threadName.c_str(), __FUNCTION__, ##__VA_ARGS__); \
+        } \
     }
 
 #define GNS_LOG_ERROR(str, ...) \
     { \
-        LogImpl(g_TelemetryFd, "{}: {} - ERROR: " str "\n", g_threadName.c_str(), __FUNCTION__, ##__VA_ARGS__); \
+        if (g_TelemetryFd != -1) \
+        { \
+            LogImpl(g_TelemetryFd, "{}: {} - ERROR: " str "\n", g_threadName.c_str(), __FUNCTION__, ##__VA_ARGS__); \
+        } \
+        else \
+        { \
+            LOG_ERROR(str, ##__VA_ARGS__); \
+        } \
     }
 
 #define FATAL_ERROR(str, ...) FATAL_ERROR_EX(1, str, ##__VA_ARGS__)
+
+// Some of these files need the LOG_* macros.
+#include "retryshared.h"
+#include "socketshared.h"
+#include "stringshared.h"
 
 int InitializeLogging(bool SetStderr, wil::LogFunction* ExceptionCallback = nullptr) noexcept;
 

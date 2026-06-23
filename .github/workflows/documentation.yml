@@ -4,6 +4,10 @@ on:
   push:
     branches: [main, master]
 
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   DeployDocs:
     environment:
@@ -26,7 +30,7 @@ jobs:
         run:  mkdocs build -f doc/mkdocs.yml
         shell: bash
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: doc/site
 

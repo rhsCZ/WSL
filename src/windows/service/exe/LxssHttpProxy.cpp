@@ -266,7 +266,7 @@ try
         else
         {
             // note that the DropReason is not included in AreProxyStringsIdentical as we don't want to toast if that is only change,
-            // but we still want to make sure the drop reason is updated, otherwise we risk not reporting the correct drop reason to user
+            // but we still want to make sure the drop reason is updated; otherwise, we risk not reporting the correct drop reason to user
             if (newProxySettings.UnsupportedProxyDropReason != m_proxySettings->UnsupportedProxyDropReason)
             {
                 m_proxySettings->UnsupportedProxyDropReason = newProxySettings.UnsupportedProxyDropReason;
@@ -327,12 +327,12 @@ try
     if (openBracket != ::std::wstring::npos)
     {
         const auto closeBracket = portRemoved.find_first_of(L"]");
-        if (closeBracket == ::std::wstring::npos || (openBracket + 1 >= closeBracket - 1))
+        if (closeBracket == ::std::wstring::npos || (openBracket + 1 >= closeBracket))
         {
             // no other of below checks can contain brackets
             return UnsupportedProxyReason::Supported;
         }
-        portRemoved = portRemoved.substr(openBracket + 1, closeBracket - 1);
+        portRemoved = portRemoved.substr(openBracket + 1, closeBracket - openBracket - 1);
     }
 
     in6_addr addrV6{};
@@ -552,7 +552,7 @@ std::optional<HttpProxySettings> HttpProxyStateTracker::WaitForInitialProxySetti
 void HttpProxyStateTracker::ConfigureNetworkingMode(wsl::core::NetworkingMode mode) noexcept
 {
     auto lock = m_proxySettingsLock.lock();
-    // if we fallback to NAT mode need to strip bad settings
+    // if we fall back to NAT mode need to strip bad settings
     if (m_proxySettings.has_value() && mode != m_networkMode)
     {
         FilterProxySettingsByNetworkConfiguration(m_proxySettings.value(), mode);

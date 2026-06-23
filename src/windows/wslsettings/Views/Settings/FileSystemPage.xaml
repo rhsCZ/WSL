@@ -6,24 +6,27 @@
     xmlns:behaviors="using:WslSettings.Behaviors"
     behaviors:NavigationViewHeaderBehavior.HeaderMode="Never">
 
-    <Grid Margin="{ThemeResource ContentPageMargin}">
+    <Grid Margin="{ThemeResource ContentPageMargin}"
+          IsTabStop="True"
+		  AutomationProperties.LandmarkType="Main"
+		  x:Name="FileSystemPageRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TextBlock x:Uid="Settings_FileSystemPageTitle" Style="{ThemeResource PageHeaderTextBlockStyle}" Margin="{StaticResource MediumSmallBottomMargin}" HorizontalAlignment="Left"/>
+        <TextBlock x:Uid="Settings_FileSystemPageTitle" Style="{ThemeResource PageHeaderTextBlockStyle}" Margin="{StaticResource MediumSmallBottomMargin}" HorizontalAlignment="Left" AutomationProperties.HeadingLevel="Level1"/>
         <TextBlock x:Uid="Settings_ErrorTryAgainLater" x:Name="Settings_ErrorTryAgainLater" Grid.Row="1" HorizontalAlignment="Left" AutomationProperties.LiveSetting="Assertive"
             Visibility="{x:Bind ViewModel.ErrorVisibility, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource BooleanToVisibilityConverter}}"/>
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
             Visibility="{x:Bind ViewModel.SettingsContentVisibility, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
-                <ctControls:SettingsExpander x:Uid="Settings_DefaultVHDSize">
+                <ctControls:SettingsExpander x:Name="DefaultVHDSizeExpander" x:Uid="Settings_DefaultVHDSize">
                     <TextBlock Style="{StaticResource TextBlockSettingStyle}" Text="{x:Bind ViewModel.DefaultVHDSize, Mode=OneWay, Converter={StaticResource MegabyteStringConverter}}"/>
                     <ctControls:SettingsExpander.Items>
                         <ctControls:SettingsCard HorizontalContentAlignment="Left" ContentAlignment="Left" Margin="{StaticResource SettingsExpanderItemMargin}">
                             <StackPanel Orientation="Horizontal">
-                                <TextBox x:Uid="Settings_DefaultVHDSizeTextBox" Style="{StaticResource TextBoxSettingStyle}" Margin="{StaticResource InputControlSpacingMargin}"
+                                <TextBox x:Name="DefaultVHDSizeTextBox" x:Uid="Settings_DefaultVHDSizeTextBox" Style="{StaticResource TextBoxSettingStyle}" Margin="{StaticResource InputControlSpacingMargin}"
                                     Text="{x:Bind ViewModel.DefaultVHDSize, Mode=TwoWay, UpdateSourceTrigger=LostFocus, Converter={StaticResource MegabyteNumberConverter}}" TextChanged="DefaultVHDSizeTextBox_TextChanged"/>
                                 <Button x:Uid="Settings_DefaultVHDSizeResetButton" Style="{StaticResource ButtonSettingStyle}" Margin="{StaticResource InputControlSpacingMargin}"
                                     Command="{x:Bind ViewModel.DefaultVHDSize_ResetCommand}" IsEnabled="{x:Bind ViewModel.DefaultVHDSize_ResetEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

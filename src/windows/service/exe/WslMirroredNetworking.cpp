@@ -18,6 +18,7 @@ Abstract:
 #include "Stringify.h"
 #include "WslCoreNetworkingSupport.h"
 #include "WslCoreNetworkEndpointSettings.h"
+#include "WslCoreHostDnsInfo.h"
 #include "hcs.hpp"
 #include "hns_schema.h"
 
@@ -346,6 +347,15 @@ void wsl::core::networking::WslMirroredNetworkManager::ProcessRouteChange()
                 {
                     endpointRoute.Metric = UINT16_MAX;
                 }
+
+                // Some Windows interfaces (like VPNs) can have metric 0 and routes over that interface with metric also 0, adding
+                // up to 0. Linux treats metric 0 as unspecified and will default to a 1024 metric. The highest priority metric in
+                // Linux is 1 instead so we need to switch the metric from 0 to 1.
+                if (endpointRoute.Metric == 0)
+                {
+                    endpointRoute.Metric = 1;
+                }
+
                 endpoint.Network->Routes.insert(endpointRoute);
             }
         }
@@ -433,8 +443,7 @@ void wsl::core::networking::WslMirroredNetworkManager::ProcessDNSChange()
     }
     else
     {
-        m_hostDnsInfo.UpdateNetworkInformation();
-        m_dnsInfo = m_hostDnsInfo.GetDnsSettings(
+        m_dnsInfo = wsl::core::networking::HostDnsInfo::GetDnsSettings(
             wsl::core::networking::DnsSettingsFlags::IncludeVpn | wsl::core::networking::DnsSettingsFlags::IncludeIpv6Servers |
             wsl::core::networking::DnsSettingsFlags::IncludeAllSuffixes);
     }
@@ -590,7 +599,7 @@ wsl::core::networking::WslMirroredNetworkManager::WslMirroredNetworkManager(
     // Subscribe for network change notifications. This is done before
     // obtaining the initial list of networks to connect to, in order to
     // avoid a race condition between the initial enumeration and any network
-    // changes that may be occuring at the same time. The subscription will
+    // changes that may be occurring at the same time. The subscription will
     // receive network change events, but will not be able to react to them
     // the lock is released.
     m_hcnCallback = windows::common::hcs::RegisterServiceCallback(HcnCallback, this);
@@ -895,17 +904,6 @@ try
 }
 CATCH_RETURN()
 
-static hns::DNS ConvertDnsInfoToHnsSettingsMsg(const wsl::core::networking::DnsInfo& dnsInfo)
-{
-    hns::DNS dnsSettings{};
-    dnsSettings.Options = LX_INIT_RESOLVCONF_FULL_HEADER;
-
-    dnsSettings.ServerList = wsl::shared::string::MultiByteToWide(wsl::shared::string::Join(dnsInfo.Servers, ','));
-    dnsSettings.Search = wsl::shared::string::MultiByteToWide(wsl::shared::string::Join(dnsInfo.Domains, ','));
-
-    return dnsSettings;
-}
-
 _Requires_lock_held_(m_networkLock)
 _Check_return_ HRESULT wsl::core::networking::WslMirroredNetworkManager::SendDnsRequestToGns(
     const NetworkEndpoint& endpoint, const DnsInfo& dnsInfo, hns::ModifyRequestType requestType) noexcept
@@ -915,7 +913,7 @@ try
     modifyRequest.ResourceType = hns::GuestEndpointResourceType::DNS;
     modifyRequest.RequestType = requestType;
     modifyRequest.targetDeviceName = wsl::shared::string::GuidToString<wchar_t>(endpoint.InterfaceGuid);
-    modifyRequest.Settings = ConvertDnsInfoToHnsSettingsMsg(dnsInfo);
+    modifyRequest.Settings = BuildDnsNotification(dnsInfo);
 
     WSL_LOG(
         "WslMirroredNetworkManager::SendDnsRequestToGns",
@@ -1026,7 +1024,7 @@ _Check_return_ bool wsl::core::networking::WslMirroredNetworkManager::SyncIpStat
     const auto makingIpInterfaceUpdate = endpoint.Network->PendingIPInterfaceUpdate;
     // Linux may delete routes behind us when making interface, address, and route changes
     // will track when to refresh v4 and v6 routes to ensure routes are still present after changes
-    // a few custmomers have seen this when we update temporary v6 addresses, for example
+    // a few customers have seen this when we update temporary v6 addresses, for example
     auto refreshAllRoutes = false;
 
     // First: update Linux with any interface updates
@@ -1237,7 +1235,7 @@ _Check_return_ bool wsl::core::networking::WslMirroredNetworkManager::SyncIpStat
         {
             auto trackedAddress = endpoint.StateTracking->IpAddresses.emplace(TrackedIpAddress(hostAddress)).first;
             // detect if previously sync'd addresses need to be updated
-            // this addresses issues we've seen where addresses were removed from Linux without our knowlege
+            // this addresses issues we've seen where addresses were removed from Linux without our knowledge
             shouldRefreshAllAddresses |= trackedAddress->SyncStatus == PendingAdd || trackedAddress->SyncStatus == PendingUpdate;
         }
 
@@ -1383,7 +1381,7 @@ _Check_return_ bool wsl::core::networking::WslMirroredNetworkManager::SyncIpStat
         {
             const auto trackedRoute = endpoint.StateTracking->Routes.emplace(TrackedRoute(hostRoute)).first;
             // detect if previously sync'd routes need to be updated
-            // this addresses issues we've seen where routes were removed from Linux without our knowlege
+            // this addresses issues we've seen where routes were removed from Linux without our knowledge
             // and routes couldn't be updated later because required routes, like the prefix route, wasn't there
             refreshAllRoutes |= trackedRoute->SyncStatus == PendingAdd || trackedRoute->SyncStatus == PendingUpdate;
         }
@@ -1686,7 +1684,7 @@ try
             // mirroredConnectedInterfaces won't equal m_hostConnectedInterfaces when:
             // - there are hidden host interfaces
             //   i.e., interfaces are in m_networkEndpoints but not in m_hostConnectedInterfaces
-            // - when HNS hasn't yet mirrored an connected host interface
+            // - when HNS hasn't yet mirrored a connected host interface
             //   i.e. interfaces are in m_hostConnectedInterfaces but not in m_networkEndpoints
             //
             // if HNS has not yet mirrored a host interface, we should not indicate we are in sync
@@ -1982,7 +1980,6 @@ void wsl::core::networking::WslMirroredNetworkManager::AddEndpointImpl(EndpointT
         THROW_IF_FAILED(hr);
 
         endpointTrackingObject.m_networkEndpoint.Network->MacAddress = endpointTrackingObject.m_hnsEndpoint.MacAddress;
-        endpointTrackingObject.m_networkEndpoint.Network->DeviceName = endpointTrackingObject.m_hnsEndpoint.PortFriendlyName;
 
         if (IsInterfaceIndexOfGelnic(endpointTrackingObject.m_networkEndpoint.Network->InterfaceIndex))
         {
@@ -2577,7 +2574,6 @@ void __stdcall wsl::core::networking::WslMirroredNetworkManager::HcnServiceConne
     auto* const manager = static_cast<WslMirroredNetworkManager*>(Context);
 
     const auto lock = manager->m_networkLock.lock_exclusive();
-    WI_ASSERT(manager->m_state == State::Started);
     if (manager->m_state == State::Stopped)
     {
         return;
@@ -2603,7 +2599,6 @@ try
     auto* const manager = static_cast<WslMirroredNetworkManager*>(Context);
 
     const auto lock = manager->m_networkLock.lock_exclusive();
-    WI_ASSERT(manager->m_state == State::Started);
     if (manager->m_state == State::Stopped)
     {
         return;

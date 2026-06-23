@@ -80,7 +80,7 @@ int EventFdVariationReadWrite(PLXT_ARGS Args)
     LXT_SYNCHRONIZATION_POINT_START();
 
     //
-    // FIXME: Add 0 varaition
+    // FIXME: Add 0 variation
     //
 
     //
@@ -248,12 +248,12 @@ int EventFdVariationReadWrite(PLXT_ARGS Args)
 
     memset(&LargeValue, 0, sizeof(LargeValue));
     LargeValue.Value = 1;
-    Size = write(Fd, &LargeValue, sizeof(LargeValue));
+    Size = write(Fd, &LargeValue, sizeof(LargeValue.Value));
     LxtCheckEqual(Size, sizeof(LargeValue.Value), "%lld");
     LxtCheckEqual(LargeValue.Value, 1, "%llu");
 
     LargeValue.Value = 0;
-    Size = read(Fd, &LargeValue, sizeof(LargeValue));
+    Size = read(Fd, &LargeValue, sizeof(LargeValue.Value));
     LxtCheckEqual(Size, sizeof(LargeValue.Value), "%lld");
     LxtCheckEqual(LargeValue.Value, 1, "%llu");
 

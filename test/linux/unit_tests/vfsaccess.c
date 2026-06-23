@@ -107,7 +107,7 @@ struct reuid_t
 
 int VfsAccessCheckResult(int ResultActual, int ResultExpected, int ErrnoActual, int ErrnoExpected, char* Message, int VariationIndex);
 
-void VfsAcccessFileObjectCleanup(void);
+void VfsAccessFileObjectCleanup(void);
 
 int VfsAccessFileObjectCreateFiles(void);
 
@@ -217,7 +217,7 @@ ErrorExit:
     return !LXT_SUCCESS(Result);
 }
 
-void VfsAcccessFileObjectCleanup(void)
+void VfsAccessFileObjectCleanup(void)
 
 /*++
 
@@ -458,10 +458,8 @@ int VfsAccessFileObjectChecks(PLXT_ARGS Args)
     int Result;
     int ResultActual;
     int ResultExpected;
-    bool VirtiofsNoDax;
 
     LxtLogInfo("Fs type %d with dax = %d\n", g_LxtFsInfo.FsType, g_LxtFsInfo.Flags.Dax);
-    VirtiofsNoDax = g_LxtFsInfo.FsType == LxtFsTypeVirtioFs && g_LxtFsInfo.Flags.Dax == 0;
     memset(Files, -1, sizeof(Files));
     LxtCheckResult(VfsAccessFileObjectOpenFiles(Files));
     for (Index = 0; Index < VFS_FILE_OBJECT_COUNT; ++Index)
@@ -531,22 +529,15 @@ int VfsAccessFileObjectChecks(PLXT_ARGS Args)
         // N.B. The Linux 9p client does not allow mapping shared if the file is
         //      opened for write.
         //
-        // N.B. The virtiofs device relies on fuse mapping which only supports
-        //      shared in the presence of DAX.
-        //
 
         ErrnoExpected = EACCES;
         if (Files[Index].Flags == O_PATH)
         {
             ErrnoExpected = EBADF;
         }
-        else if (VirtiofsNoDax && (Files[Index].Flags == O_RDONLY || (Files[Index].Flags & O_ACCMODE) == O_RDWR))
-        {
-            ErrnoExpected = ENODEV;
-        }
 
         ResultExpected = -1;
-        if (!VirtiofsNoDax && (((Files[Index].Flags & O_ACCMODE) == O_RDONLY) || ((Files[Index].Flags & O_ACCMODE) == O_RDWR)) &&
+        if ((((Files[Index].Flags & O_ACCMODE) == O_RDONLY) || ((Files[Index].Flags & O_ACCMODE) == O_RDWR)) &&
             ((Files[Index].Flags & O_PATH) == 0))
         {
 
@@ -619,22 +610,15 @@ int VfsAccessFileObjectChecks(PLXT_ARGS Args)
         //
         // Validate map write shared and private
         //
-        // N.B. The virtiofs device relies on fuse mapping which only supports
-        //      shared in the presence of DAX.
-        //
 
         ErrnoExpected = EACCES;
         if (Files[Index].Flags == O_PATH)
         {
             ErrnoExpected = EBADF;
         }
-        else if (VirtiofsNoDax && (Files[Index].Flags & O_ACCMODE) == O_RDWR)
-        {
-            ErrnoExpected = ENODEV;
-        }
 
         ResultExpected = -1;
-        if (!VirtiofsNoDax && (Files[Index].Flags & O_ACCMODE) == O_RDWR)
+        if ((Files[Index].Flags & O_ACCMODE) == O_RDWR)
         {
             ResultExpected = 1;
         }
@@ -691,10 +675,8 @@ int VfsAccessFileObjectSymlinksChecks(PLXT_ARGS Args)
     int Result;
     int ResultActual;
     int ResultExpected;
-    bool VirtiofsNoDax;
 
     LxtLogInfo("Fs type %d with dax = %d\n", g_LxtFsInfo.FsType, g_LxtFsInfo.Flags.Dax);
-    VirtiofsNoDax = g_LxtFsInfo.FsType == LxtFsTypeVirtioFs && g_LxtFsInfo.Flags.Dax == 0;
 
     memset(Files, -1, sizeof(Files));
     LxtCheckResult(VfsAccessFileObjectOpenSymlinks(Files));
@@ -738,13 +720,9 @@ int VfsAccessFileObjectSymlinksChecks(PLXT_ARGS Args)
         {
             ErrnoExpected = EBADF;
         }
-        else if (VirtiofsNoDax && (Files[Index].Flags == O_RDONLY || (Files[Index].Flags & O_ACCMODE) == O_RDWR))
-        {
-            ErrnoExpected = ENODEV;
-        }
 
         ResultExpected = -1;
-        if (!VirtiofsNoDax && (((Files[Index].Flags & O_ACCMODE) == O_RDONLY) || ((Files[Index].Flags & O_ACCMODE) == O_RDWR)) &&
+        if ((((Files[Index].Flags & O_ACCMODE) == O_RDONLY) || ((Files[Index].Flags & O_ACCMODE) == O_RDWR)) &&
             ((Files[Index].Flags & O_PATH) == 0))
         {
 
@@ -770,13 +748,9 @@ int VfsAccessFileObjectSymlinksChecks(PLXT_ARGS Args)
         {
             ErrnoExpected = EBADF;
         }
-        else if (VirtiofsNoDax && (Files[Index].Flags & O_ACCMODE) == O_RDWR)
-        {
-            ErrnoExpected = ENODEV;
-        }
 
         ResultExpected = -1;
-        if (!VirtiofsNoDax && (Files[Index].Flags & O_ACCMODE) == O_RDWR)
+        if ((Files[Index].Flags & O_ACCMODE) == O_RDWR)
         {
             ResultExpected = 1;
         }
@@ -852,16 +826,11 @@ int VfsAccessRemapReference(PLXT_ARGS Args)
     char Buffer;
     int FdReadOnly = -1;
     int FdReadWrite = -1;
-    int MapFlags;
     void* MapResult;
     void* MapReadOnly = NULL;
     void* MapReadWrite = NULL;
     void* RemappedMemory = NULL;
     int Result;
-    bool VirtiofsNoDax;
-
-    VirtiofsNoDax = g_LxtFsInfo.FsType == LxtFsTypeVirtioFs && g_LxtFsInfo.Flags.Dax == 0;
-    MapFlags = VirtiofsNoDax ? MAP_PRIVATE : MAP_SHARED;
 
     //
     // Open and map a file whose only reference is read only and open second
@@ -869,9 +838,9 @@ int VfsAccessRemapReference(PLXT_ARGS Args)
     //
 
     LxtCheckErrno(FdReadOnly = open(g_VfsFiles[VFS_ACCESS_REMAP_FILE].Name, O_RDONLY, 0));
-    LxtCheckMapErrno(MapReadOnly = mmap(NULL, sizeof(Buffer), PROT_READ, MapFlags, FdReadOnly, 0));
+    LxtCheckMapErrno(MapReadOnly = mmap(NULL, sizeof(Buffer), PROT_READ, MAP_SHARED, FdReadOnly, 0));
     LxtCheckErrno(FdReadWrite = open(g_VfsFiles[VFS_ACCESS_REMAP_FILE].Name, O_RDWR, 0));
-    LxtCheckMapErrno(MapReadWrite = mmap(NULL, sizeof(Buffer), PROT_READ | PROT_WRITE, MapFlags, FdReadWrite, 0));
+    LxtCheckMapErrno(MapReadWrite = mmap(NULL, sizeof(Buffer), PROT_READ | PROT_WRITE, MAP_SHARED, FdReadWrite, 0));
     LxtCheckMapErrno(RemappedMemory = mremap(MapReadWrite, sizeof(Buffer), PAGE_SIZE * 2, MREMAP_MAYMOVE));
 
 ErrorExit:
@@ -1027,7 +996,7 @@ void VfsAccessChmodCapChild(void)
     CapData[1].effective = CapData[1].permitted;
 
     //
-    // Drop privlidges so the current process does not have CAP_FOWNER.
+    // Drop privileges so the current process does not have CAP_FOWNER.
     //
 
     LxtCheckErrno(prctl(PR_SET_KEEPCAPS, 1));
@@ -1108,7 +1077,7 @@ void VfsAccessOPathChild(void)
     Fd = -1;
 
     //
-    // Drop privlidges so the current process does not have VFS related
+    // Drop privileges so the current process does not have VFS related
     // capabilities.
     //
 
@@ -1249,7 +1218,7 @@ void VfsAccessRenameCapChild(void)
     CapData[1].effective = CapData[1].permitted;
 
     //
-    // Drop privlidges so the current process does not have CAP_FOWNER.
+    // Drop privileges so the current process does not have CAP_FOWNER.
     //
 
     LxtCheckErrno(prctl(PR_SET_KEEPCAPS, 1));
@@ -1305,7 +1274,7 @@ void VfsAccessRmdirCapChild(void)
     CapData[1].effective = CapData[1].permitted;
 
     //
-    // Drop privlidges so the current process does not have CAP_FOWNER.
+    // Drop privileges so the current process does not have CAP_FOWNER.
     //
 
     LxtCheckErrno(prctl(PR_SET_KEEPCAPS, 1));
@@ -1651,7 +1620,7 @@ int VfsAccessSetUserGroupId(PLXT_ARGS Args)
     if (g_LxtFsInfo.FsType != LxtFsTypeVirtioFs)
     {
         //
-        // Fork and drop privlidges so the current process does not have CAP_FOWNER
+        // Fork and drop privileges so the current process does not have CAP_FOWNER
         // which is required for changing the owner of a file with the set-user-id
         // or set-group-id bits set.
         //
@@ -1775,7 +1744,7 @@ void VfsAccessInodeChecksChild(void)
     CapHeader.version = _LINUX_CAPABILITY_VERSION_3;
 
     //
-    // Drop privlidges so the current process does not have VFS capabilities
+    // Drop privileges so the current process does not have VFS capabilities
     // and is in the other user\group.
     //
 
@@ -1785,8 +1754,8 @@ void VfsAccessInodeChecksChild(void)
     LxtCheckErrno(LxtCapSet(&CapHeader, CapData));
 
     //
-    // For each file, check that read, write and execute is enforced. Similiarly
-    // for directotries check that list, create\delete, and search is enforced.
+    // For each file, check that read, write and execute is enforced. Similarly
+    // for directories check that list, create\delete, and search is enforced.
     //
 
     for (Index = 0; Index < LXT_COUNT_OF(g_VfsInodeEntries); ++Index)
@@ -2106,7 +2075,7 @@ ErrorExit:
 
     if (Cleanup != false)
     {
-        VfsAcccessFileObjectCleanup();
+        VfsAccessFileObjectCleanup();
         LxtFsTestCleanup(VFS_ACCESS_PARENT_DIR, "/vfsaccesstest", g_UseDrvFs);
     }
 
@@ -2135,7 +2104,7 @@ void VfsAccessUTimeCapChild(void)
     CapData[1].effective = CapData[1].permitted;
 
     //
-    // Drop privlidges so the current process does not have CAP_FOWNER.
+    // Drop privileges so the current process does not have CAP_FOWNER.
     //
 
     LxtCheckErrno(prctl(PR_SET_KEEPCAPS, 1));
@@ -2267,7 +2236,7 @@ int VfsAccessSetFsUid(PLXT_ARGS Args)
     }
 
     //
-    // Verify tha topening a the file fails since we no longer have the correct fsuid or capabilities.
+    // Verify that opening the file fails since we no longer have the correct fsuid or capabilities.
     //
 
     LxtCheckErrnoFailure(open(VFS_ACCESS_FSUID_FILE, O_RDWR), EACCES);
@@ -2469,7 +2438,7 @@ int VfsAccessSetUid(PLXT_ARGS Args)
         //
         // This test checks that unprivileged processes can Set the euid
         // to the ruid or suid. Need to fork and wait as privileges are
-        // irreversably dropped by this syscall
+        // irreversibly dropped by this syscall
         //
 
         if (fork_wait() == 0)

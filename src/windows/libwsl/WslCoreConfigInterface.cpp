@@ -23,7 +23,7 @@ static_assert(NetworkingConfiguration::None == static_cast<int32_t>(wsl::core::N
 static_assert(NetworkingConfiguration::Nat == static_cast<int32_t>(wsl::core::NetworkingMode::Nat));
 static_assert(NetworkingConfiguration::Bridged == static_cast<int32_t>(wsl::core::NetworkingMode::Bridged));
 static_assert(NetworkingConfiguration::Mirrored == static_cast<int32_t>(wsl::core::NetworkingMode::Mirrored));
-static_assert(NetworkingConfiguration::VirtioProxy == static_cast<int32_t>(wsl::core::NetworkingMode::VirtioProxy));
+static_assert(NetworkingConfiguration::Consomme == static_cast<int32_t>(wsl::core::NetworkingMode::Consomme));
 
 static_assert(MemoryReclaimConfiguration::Disabled == static_cast<int32_t>(wsl::core::MemoryReclaimMode::Disabled));
 static_assert(MemoryReclaimConfiguration::Gradual == static_cast<int32_t>(wsl::core::MemoryReclaimMode::Gradual));
@@ -94,7 +94,7 @@ WslConfigSetting GetWslConfigSetting(WslConfig_t wslConfig, WslConfigEntry wslCo
     case SwapSizeBytes:
         static_assert(std::is_same<decltype(wslConfigSetting.UInt64Value), decltype(wslConfig->Config.SwapSizeBytes)>::value);
         wslConfigSetting.UInt64Value = wslConfig->Config.SwapSizeBytes;
-        return wslConfigSetting;
+        break;
     case SwapFilePath:
         static_assert(std::is_same<decltype(wslConfigSetting.StringValue), decltype(wslConfig->Config.SwapFilePath.c_str())>::value);
         wslConfigSetting.StringValue = wslConfig->Config.SwapFilePath.c_str();
@@ -113,7 +113,7 @@ WslConfigSetting GetWslConfigSetting(WslConfig_t wslConfig, WslConfigEntry wslCo
     case IgnoredPorts:
     {
         // The IgnoredPorts member is stored as a set of 16-bit unsigned integers.
-        // These are convereted back to a string here for the caller to consume.
+        // These are converted back to a string here for the caller to consume.
         wslConfig->IgnoredPortsStr.clear();
         std::vector<uint16_t> ignoredPorts{wslConfig->Config.IgnoredPorts.begin(), wslConfig->Config.IgnoredPorts.end()};
         std::sort(ignoredPorts.begin(), ignoredPorts.end());
@@ -144,7 +144,7 @@ WslConfigSetting GetWslConfigSetting(WslConfig_t wslConfig, WslConfigEntry wslCo
         static_assert(std::is_same<decltype(wslConfigSetting.BoolValue), decltype(wslConfig->Config.EnableDnsProxy)>::value);
         wslConfigSetting.BoolValue = wslConfig->Config.EnableDnsProxy;
         break;
-    case DNSTunellingEnabled:
+    case DNSTunnelingEnabled:
         static_assert(std::is_same<decltype(wslConfigSetting.BoolValue), decltype(wslConfig->Config.EnableDnsTunneling)>::value);
         wslConfigSetting.BoolValue = wslConfig->Config.EnableDnsTunneling;
         break;
@@ -451,7 +451,7 @@ unsigned long SetWslConfigSetting(WslConfig_t wslConfig, WslConfigSetting wslCon
     case DNSProxyEnabled:
         return SetWslConfigSetting(
             wslConfig, ConfigSetting::DnsProxy, defaultConfig.EnableDnsProxy, wslConfigSetting.BoolValue, wslConfig->Config.EnableDnsProxy);
-    case DNSTunellingEnabled:
+    case DNSTunnelingEnabled:
     {
         static_assert(std::is_same<decltype(wslConfigSetting.BoolValue), decltype(wslConfig->Config.EnableDnsTunneling)>::value);
         ConfigKey key({ConfigSetting::DnsTunneling, ConfigSetting::Experimental::DnsTunneling}, wslConfigSetting.BoolValue);

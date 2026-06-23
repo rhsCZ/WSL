@@ -10,6 +10,11 @@ import functools
 from git import Repo
 from urllib.parse import urlparse
 
+# Reconfigure stdout/stderr to handle unencodable characters (e.g. Unicode in
+# commit messages) on consoles that use legacy code-pages such as cp1252.
+sys.stdout.reconfigure(errors='backslashreplace')
+sys.stderr.reconfigure(errors='backslashreplace')
+
 @click.command()
 @click.argument('version', required=True)
 @click.argument('assets', default=None, nargs=-1)
@@ -22,7 +27,10 @@ from urllib.parse import urlparse
 @click.option('--auto-release-notes', is_flag=True, default=False)
 def main(version: str, previous: str, max_message_lines: int, publish: bool, assets: list, no_fetch: bool, github_token: str, use_current_ref: bool, auto_release_notes: bool):
     if publish:
-        if assets is None:
+        # Click provides an empty tuple when no assets are passed. Guard against both
+        # an explicit None (older Click versions / direct invocation) and an empty
+        # collection so we do not accidentally create a release without payload.
+        if not assets:
             raise RuntimeError('--publish requires at least one asset')
 
         if github_token is None:
@@ -53,7 +61,7 @@ def main(version: str, previous: str, max_message_lines: int, publish: bool, ass
                 issues = filter_github_issues(issues, github_token)
 
             if len(issues) > 1:
-                print(f'WARNING: found more than 1 github issues in message: {message}. Issues: {issues}', file=sys.stderr)
+                print(f'WARNING: found more than 1 github issues in message: {e.message}. Issues: {issues}', file=sys.stderr)
 
             message = e.message[:-1] if e.message.endswith('\n') else e.message
 
@@ -75,10 +83,10 @@ def main(version: str, previous: str, max_message_lines: int, publish: bool, ass
         print(f'\n{changes}')
 
 @backoff.on_exception(backoff.expo, (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.RequestException), max_time=600)
-def get_github_pr_message(token: str, message: str) -> str:
+def get_github_pr_message(token: str, message: str) -> tuple[str | None, str | None]:
     match = re.search(r'\(#([0-9]+)\)', message)
     if match is None:
-        print(f'Warning: failed to extract Github PR number from message: {message}')
+        print(f'Warning: failed to extract GitHub PR number from message: {message}', file=sys.stderr)
         return None, None
 
     pr_number = match.group(1)
@@ -108,7 +116,7 @@ def get_previous_release(version: tuple) -> str:
     previous_versions = [e for e in versions if e < version]
 
     if not previous_versions:
-        raise RuntimeError(f'No previous found on Github. Response: {response.json()}')
+        raise RuntimeError(f'No previous found on GitHub. Response: {response.json()}')
 
     return '.'.join(str(e) for e in max(previous_versions))
 
@@ -176,7 +184,7 @@ def get_change_list(version: str, previous: str, fetch: bool) -> list:
 
 @backoff.on_exception(backoff.expo, (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.RequestException), max_time=600)
 def publish_release(version: str, changes: str, assets: list, auto_release_notes: bool, token: str):
-    print(f'Creating private Github release for: {version}', file=sys.stderr)
+    print(f'Creating private GitHub release for: {version}', file=sys.stderr)
 
     # First create the release
     headers = {'Accept': 'application/vnd.github+json',

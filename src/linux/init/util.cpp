@@ -17,6 +17,7 @@ Abstract:
 #include <sys/epoll.h>
 #include <sys/utsname.h>
 #include <sys/types.h>
+#include <sys/sysinfo.h>
 #include <grp.h>
 #include <unistd.h>
 #include <sys/prctl.h>
@@ -26,6 +27,10 @@ Abstract:
 #include <iostream>
 #include <sstream>
 #include <regex>
+#include <thread>
+#include <chrono>
+#include <climits>
+#include <pthread.h>
 #include "common.h"
 #include "wslpath.h"
 #include "util.h"
@@ -53,6 +58,7 @@ Abstract:
 #define WSL_MOUNT_OPTION_SEP ','
 
 int g_IsVmMode = -1;
+static std::optional<int> g_CachedFeatureFlags;
 static sigset_t g_originalSignals;
 thread_local std::string g_threadName;
 
@@ -171,6 +177,7 @@ Return Value:
     if (!InteropConnection)
     {
         LOG_ERROR("accept4 failed {}", errno);
+        return {};
     }
 
     timeval Timeout{};
@@ -197,7 +204,7 @@ InteropServer::~InteropServer()
     Reset();
 }
 
-int UtilAcceptVsock(int SocketFd, sockaddr_vm SocketAddress, int Timeout)
+int UtilAcceptVsock(int SocketFd, sockaddr_vm SocketAddress, int Timeout, int SocketFlags)
 
 /*++
 
@@ -214,6 +221,8 @@ Arguments:
         address of the peer socket.
 
     Timeout - Supplies a timeout.
+
+    SocketFlags - Supplies the socket flags.
 
 Return Value:
 
@@ -263,7 +272,7 @@ Return Value:
     if (Result != -1)
     {
         socklen_t SocketAddressSize = sizeof(SocketAddress);
-        Result = accept4(SocketFd, reinterpret_cast<sockaddr*>(&SocketAddress), &SocketAddressSize, SOCK_CLOEXEC);
+        Result = accept4(SocketFd, reinterpret_cast<sockaddr*>(&SocketAddress), &SocketAddressSize, SocketFlags);
     }
 
     if (Result < 0)
@@ -537,7 +546,7 @@ Return Value:
     return Socket;
 }
 
-wil::unique_fd UtilConnectVsock(unsigned int Port, bool CloseOnExec, std::optional<int> SocketBuffer) noexcept
+wil::unique_fd UtilConnectVsock(unsigned int Port, bool CloseOnExec, std::optional<int> SocketBuffer, const std::source_location& Source) noexcept
 
 /*++
 
@@ -553,6 +562,8 @@ Arguments:
 
     SocketBuffer - Optionally supplies the size to use for the socket send and receive buffers.
 
+    Source - Supplies the caller location.
+
 Return Value:
 
     A file descriptor representing the connected socket, -1 on failure.
@@ -565,7 +576,7 @@ Return Value:
     wil::unique_fd SocketFd{socket(AF_VSOCK, Type, 0)};
     if (!SocketFd)
     {
-        LOG_ERROR("socket failed {}", errno);
+        LOG_ERROR("socket failed {} (from: {})", errno, Source);
         return {};
     }
 
@@ -577,7 +588,7 @@ Return Value:
     Timeout.tv_sec = LX_INIT_HVSOCKET_TIMEOUT_SECONDS;
     if (setsockopt(SocketFd.get(), AF_VSOCK, SO_VM_SOCKETS_CONNECT_TIMEOUT, &Timeout, sizeof(Timeout)) < 0)
     {
-        LOG_ERROR("setsockopt SO_VM_SOCKETS_CONNECT_TIMEOUT failed {}", errno);
+        LOG_ERROR("setsockopt SO_VM_SOCKETS_CONNECT_TIMEOUT failed {}, (from: {})", errno, Source);
         return {};
     }
 
@@ -586,13 +597,13 @@ Return Value:
         int BufferSize = *SocketBuffer;
         if (setsockopt(SocketFd.get(), SOL_SOCKET, SO_SNDBUF, &BufferSize, sizeof(BufferSize)) < 0)
         {
-            LOG_ERROR("setsockopt(SO_SNDBUF, {}) failed {}", BufferSize, errno);
+            LOG_ERROR("setsockopt(SO_SNDBUF, {}) failed {}, (from: {})", BufferSize, errno, Source);
             return {};
         }
 
         if (setsockopt(SocketFd.get(), SOL_SOCKET, SO_RCVBUF, &BufferSize, sizeof(BufferSize)) < 0)
         {
-            LOG_ERROR("setsockopt(SO_RCVBUF, {}) failed {}", BufferSize, errno);
+            LOG_ERROR("setsockopt(SO_RCVBUF, {}) failed {}, (from: {})", BufferSize, errno, Source);
             return {};
         }
     }
@@ -603,14 +614,14 @@ Return Value:
     SocketAddress.svm_port = Port;
     if (connect(SocketFd.get(), (const struct sockaddr*)&SocketAddress, sizeof(SocketAddress)) < 0)
     {
-        LOG_ERROR("connect port {} failed {}", Port, errno);
+        LOG_ERROR("connect port {} failed {} (from: {})", Port, errno, Source);
         return {};
     }
 
     return SocketFd;
 }
 
-int UtilCreateProcessAndWait(const char* const File, const char* const Argv[], int* Status, const std::map<std::string, std::string>& Env)
+int UtilCreateProcessAndWait(const char* const File, const char* const Argv[], int* Status, const std::map<std::string, std::string>& Env, bool DetachTerminal)
 
 /*++
 
@@ -626,6 +637,9 @@ Arguments:
 
     Status - Supplies an optional pointer that receives the exit status of the
         process.
+
+    DetachTerminal - Supplies a boolean that, when true, calls setsid() in the
+        child process to detach it from the controlling terminal.
 
 Return Value:
 
@@ -661,7 +675,7 @@ Return Value:
 
         if (UtilSetSignalHandlers(g_SavedSignalActions, false) < 0 || UtilRestoreBlockedSignals() < 0)
         {
-            exit(-1);
+            _exit(-1);
         }
 
         //
@@ -674,6 +688,19 @@ Return Value:
         }
 
         //
+        // Detach from the controlling terminal if requested.
+        //
+
+        if (DetachTerminal)
+        {
+            if (setsid() == -1)
+            {
+                LOG_ERROR("setsid failed {}", errno);
+                _exit(-1);
+            }
+        }
+
+        //
         // Invoke the executable.
         //
 
@@ -683,7 +710,7 @@ Return Value:
         // with std::string anyway.
         execv(File, const_cast<char* const*>(Argv));
         LOG_ERROR("execv({}) failed with {}", File, errno);
-        exit(-1);
+        _exit(-1);
     }
 
     if (Status == nullptr)
@@ -733,8 +760,8 @@ Arguments:
 
     CommandLine - Supplies the command line of the process to launch.
 
-    Output - Supplies an optional pointer to an std::string to receive the output of the command.
-        If no buffer is provied the output will appear in stdout.
+    Output - Supplies an optional pointer to a std::string to receive the output of the command.
+        If no buffer is provided the output will appear in stdout.
 
     ExpectedStatus - Supplies the expected return status of the command.
 
@@ -765,10 +792,6 @@ Return Value:
         if (Output)
         {
             (*Output) += Buffer.data();
-            if (Result < 0)
-            {
-                goto ErrorExit;
-            }
         }
         else
         {
@@ -900,11 +923,12 @@ try
         }
         else if (strcmp(MountEnum.Current().FileSystemType, VIRTIO_FS_TYPE) == 0)
         {
-            MountSource = UtilParseVirtiofsMountSource(MountEnum.Current().Source);
+            MountSource = QueryVirtiofsMountSource(MountEnum.Current().Source);
             if (MountSource.empty())
             {
                 continue;
             }
+
             MountEnum.Current().Source = MountSource.data();
         }
         else if (strcmp(MountEnum.Current().FileSystemType, DRVFS_FS_TYPE) == 0)
@@ -1090,13 +1114,14 @@ try
         wsl::shared::MessageWriter<LX_INIT_QUERY_ENVIRONMENT_VARIABLE> Message(LxInitMessageQueryEnvironmentVariable);
         Message.WriteString(Name);
 
-        channel.SendMessage<LX_INIT_QUERY_ENVIRONMENT_VARIABLE>(Message.Span());
+        auto transaction = channel.StartTransaction();
+        transaction.Send<LX_INIT_QUERY_ENVIRONMENT_VARIABLE>(Message.Span());
 
         //
         // Read a response, this will contain the environment variable value if it exists.
         //
 
-        Value = channel.ReceiveMessage<LX_INIT_QUERY_ENVIRONMENT_VARIABLE>().Buffer;
+        Value = transaction.Receive<LX_INIT_QUERY_ENVIRONMENT_VARIABLE>().Buffer;
 
         //
         // Set the environment variable for future queries.
@@ -1116,86 +1141,7 @@ catch (...)
     return {};
 }
 
-int UtilGetFeatureFlags(const wsl::linux::WslDistributionConfig& Config)
-
-/*++
-
-Routine Description:
-
-    This routine gets the feature flags, either directly, from an environment
-    variable, or by querying it from the init process.
-
-Arguments:
-
-    Config - Supplies the distribution config.
-
-Return Value:
-
-    The feature flags.
-
---*/
-
-{
-    //
-    // If feature flags are already known, return them.
-    //
-
-    static std::optional<int> g_CachedFeatureFlags;
-    if (g_CachedFeatureFlags)
-    {
-        return *g_CachedFeatureFlags;
-    }
-
-    //
-    // If an error occurs, just return no features.
-    //
-
-    if (Config.FeatureFlags.has_value())
-    {
-        return Config.FeatureFlags.value();
-    }
-
-    //
-    // Check if the environment variable is present.
-    //
-    // N.B. This is used for processes launched directly from init (e.g.
-    //      mount.drvfs during initial configuration), because they may not be
-    //      able to connect to init.
-    //
-
-    int FeatureFlags = LxInitFeatureNone;
-
-    const char* FeatureFlagEnv = getenv(WSL_FEATURE_FLAGS_ENV);
-
-    if (FeatureFlagEnv != nullptr)
-    {
-        FeatureFlags = strtol(FeatureFlagEnv, nullptr, 16);
-    }
-    else
-    {
-        //
-        // Query init for the value.
-        //
-
-        wsl::shared::SocketChannel channel{UtilConnectUnix(WSL_INIT_INTEROP_SOCKET), "wslinfo"};
-        if (channel.Socket() < 0)
-        {
-            return FeatureFlags;
-        }
-
-        MESSAGE_HEADER Message;
-        Message.MessageType = LxInitMessageQueryFeatureFlags;
-        Message.MessageSize = sizeof(Message);
-
-        channel.SendMessage(Message);
-        FeatureFlags = channel.ReceiveMessage<RESULT_MESSAGE<int32_t>>().Result;
-    }
-
-    g_CachedFeatureFlags = FeatureFlags;
-    return FeatureFlags;
-}
-
-std::optional<LX_MINI_INIT_NETWORKING_MODE> UtilGetNetworkingMode(void)
+int UtilGetFeatureFlags()
 
 /*++
 
@@ -1214,12 +1160,109 @@ Return Value:
 
 --*/
 
-try
 {
     //
-    // Query init for the value.
+    // If feature flags are already known, return them.
     //
 
+    if (g_CachedFeatureFlags)
+    {
+        return *g_CachedFeatureFlags;
+    }
+
+    //
+    // Check if the environment variable is present.
+    //
+    // N.B. This is used for processes launched directly from init (e.g.
+    //      mount.drvfs during initial configuration), because they may not be
+    //      able to connect to init.
+    //
+
+    int FeatureFlags = LxInitFeatureNone;
+    const char* FeatureFlagEnv = getenv(WSL_FEATURE_FLAGS_ENV);
+    if (FeatureFlagEnv != nullptr)
+    {
+        FeatureFlags = strtol(FeatureFlagEnv, nullptr, 16);
+    }
+    else
+    {
+        //
+        // Query init for the value. If an error occurs, just return no features.
+        //
+
+        wsl::shared::SocketChannel channel{UtilConnectUnix(WSL_INIT_INTEROP_SOCKET), "wslinfo"};
+        if (channel.Socket() < 0)
+        {
+            return FeatureFlags;
+        }
+
+        MESSAGE_HEADER Message;
+        Message.MessageType = LxInitMessageQueryFeatureFlags;
+        Message.MessageSize = sizeof(Message);
+
+        auto transaction = channel.StartTransaction();
+        transaction.Send(Message);
+        FeatureFlags = transaction.Receive<RESULT_MESSAGE<int32_t>>().Result;
+    }
+
+    UtilSetFeatureFlags(FeatureFlags, FeatureFlagEnv == nullptr);
+    return FeatureFlags;
+}
+
+void UtilSetFeatureFlags(int FeatureFlags, bool UpdateEnv)
+
+/*++
+
+Routine Description:
+
+    This routine sets the feature flags and updates the cached value and environment variable.
+
+Arguments:
+
+    FeatureFlags - Supplies the feature flags to set.
+
+    UpdateEnv - Supplies a boolean that indicates whether the environment variable should be updated.
+
+Return Value:
+
+    None.
+
+--*/
+
+try
+{
+    g_CachedFeatureFlags = FeatureFlags;
+    if (UpdateEnv)
+    {
+        auto FeatureFlagsString = std::format("{:x}", FeatureFlags);
+        if (setenv(WSL_FEATURE_FLAGS_ENV, FeatureFlagsString.c_str(), 1) < 0)
+        {
+            LOG_ERROR("setenv({}, {}, 1) failed {}", WSL_FEATURE_FLAGS_ENV, FeatureFlagsString, errno);
+        }
+    }
+}
+CATCH_LOG()
+
+std::optional<LX_MINI_INIT_NETWORKING_MODE> UtilGetNetworkingMode(void)
+
+/*++
+
+Routine Description:
+
+    This routine queries the networking mode from the init process.
+
+Arguments:
+
+    None.
+
+Return Value:
+
+    The networking mode if successful, std::nullopt otherwise.
+
+--*/
+
+try
+{
     wsl::shared::SocketChannel channel{UtilConnectUnix(WSL_INIT_INTEROP_SOCKET), "wslinfo"};
     THROW_LAST_ERROR_IF(channel.Socket() < 0);
 
@@ -1227,12 +1270,13 @@ try
     Message.MessageType = LxInitMessageQueryNetworkingMode;
     Message.MessageSize = sizeof(Message);
 
-    channel.SendMessage(Message);
+    auto transaction = channel.StartTransaction();
+    transaction.Send(Message);
 
-    const auto& response = channel.ReceiveMessage<RESULT_MESSAGE<uint8_t>>();
+    const auto& response = transaction.Receive<RESULT_MESSAGE<uint8_t>>();
     auto NetworkingMode = static_cast<LX_MINI_INIT_NETWORKING_MODE>(response.Result);
 
-    THROW_ERRNO_IF(EINVAL, NetworkingMode < LxMiniInitNetworkingModeNone || NetworkingMode > LxMiniInitNetworkingModeVirtioProxy);
+    THROW_ERRNO_IF(EINVAL, NetworkingMode < LxMiniInitNetworkingModeNone || NetworkingMode > LxMiniInitNetworkingModeConsomme);
 
     return NetworkingMode;
 }
@@ -1295,6 +1339,41 @@ Return Value:
     }
 
     return Result;
+}
+
+std::string UtilGetVmId(void)
+
+/*++
+
+Routine Description:
+
+    This routine queries the VM ID from the init process.
+
+Arguments:
+
+    None.
+
+Return Value:
+
+    The VM ID if successful, an empty string otherwise.
+
+--*/
+
+try
+{
+    wsl::shared::SocketChannel channel{UtilConnectUnix(WSL_INIT_INTEROP_SOCKET), "wslinfo"};
+    THROW_LAST_ERROR_IF(channel.Socket() < 0);
+
+    wsl::shared::MessageWriter<LX_INIT_QUERY_VM_ID> Message(LxInitMessageQueryVmId);
+    auto transaction = channel.StartTransaction();
+    transaction.Send<LX_INIT_QUERY_VM_ID>(Message.Span());
+
+    return transaction.Receive<LX_INIT_QUERY_VM_ID>().Buffer;
+}
+catch (...)
+{
+    LOG_CAUGHT_EXCEPTION();
+    return {};
 }
 
 void UtilInitGroups(const char* User, gid_t Gid)
@@ -1433,7 +1512,7 @@ Return Value:
     //
     // Check if the prefix matches.
     //
-    // N.B. For Windows paths, this is done case insensitive.
+    // N.B. For Windows paths, this is done case-insensitive.
     //
 
     if (!wsl::shared::string::StartsWith(Path, Prefix, WinPath))
@@ -1634,6 +1713,25 @@ Return Value:
     return 0;
 }
 
+int UtilMountFile(const char* Source, const char* Destination)
+try
+{
+    // Is the file is a symlink, delete it since that would break the mount.
+    if (std::filesystem::is_symlink(Destination))
+    {
+        std::filesystem::remove(Destination);
+    }
+
+    wil::unique_fd Fd{open(Destination, (O_CREAT | O_WRONLY), 0755)};
+    THROW_LAST_ERROR_IF(!Fd);
+
+    THROW_LAST_ERROR_IF(mount(Source, Destination, nullptr, (MS_RDONLY | MS_BIND), nullptr) < 0);
+    THROW_LAST_ERROR_IF(mount(nullptr, Destination, nullptr, (MS_RDONLY | MS_REMOUNT | MS_BIND), nullptr) < 0);
+
+    return 0;
+}
+CATCH_RETURN_ERRNO();
+
 int UtilMount(const char* Source, const char* Target, const char* Type, unsigned long MountFlags, const char* Options, std::optional<std::chrono::seconds> TimeoutSeconds)
 
 /*++
@@ -1675,33 +1773,66 @@ Return Value:
     //
     // Mount the device to the mount point.
     //
-    // N.B. The mount operation is only retried if the mount source does not yet exist,
-    //      which can happen when hot-added devices are not yet available in the guest.
+    // N.B. The mount operation is retried if:
+    //      - The mount source does not yet exist (hot-added devices)
+    //      - For Plan9 (9p): device is busy or not found
+    //      - For VirtioFS: invalid tag (device not ready)
     //
+    // N.B. MS_SHARED must be applied in a separate mount() call, so it is
+    //      stripped from the initial mount flags and applied after the mount.
+    //
+
+    const unsigned long initialFlags = MountFlags & ~MS_SHARED;
 
     try
     {
         if (TimeoutSeconds.has_value())
         {
             wsl::shared::retry::RetryWithTimeout<void>(
-                [&]() { THROW_LAST_ERROR_IF(mount(Source, Target, Type, MountFlags, Options) < 0); },
+                [&]() { THROW_LAST_ERROR_IF(mount(Source, Target, Type, initialFlags, Options) < 0); },
                 c_defaultRetryPeriod,
                 TimeoutSeconds.value(),
                 [&]() {
                     errno = wil::ResultFromCaughtException();
-                    return errno == ENOENT || errno == ENXIO || errno == EIO;
+
+                    // Generic device not ready errors
+                    if (errno == ENXIO || errno == EIO || errno == ENOENT)
+                    {
+                        return true;
+                    }
+
+                    // Filesystem-specific device readiness errors
+                    if (Type != nullptr)
+                    {
+                        if ((strcmp(Type, PLAN9_FS_TYPE) == 0 && errno == EBUSY) || (strcmp(Type, VIRTIO_FS_TYPE) == 0 && errno == EINVAL))
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
                 });
         }
         else
         {
-            THROW_LAST_ERROR_IF(mount(Source, Target, Type, MountFlags, Options) < 0);
+            THROW_LAST_ERROR_IF(mount(Source, Target, Type, initialFlags, Options) < 0);
         }
     }
     catch (...)
     {
         errno = wil::ResultFromCaughtException();
-        LOG_ERROR("mount({}, {}, {}, 0x{}x, {}) failed {}", Source, Target, Type, MountFlags, Options, errno);
+        LOG_ERROR("mount({}, {}, {}, {:#x}, {}) failed {}", Source, Target, Type, MountFlags, Options, errno);
         return -errno;
+    }
+
+    // N.B. The shared flag must be applied in a separate mount() call.
+    if (WI_IsFlagSet(MountFlags, MS_SHARED))
+    {
+        if (mount(nullptr, Target, nullptr, MS_SHARED, nullptr) < 0)
+        {
+            LOG_ERROR("Failed to make shared mount {} {}", Target, errno);
+            return -errno;
+        }
     }
 
     return 0;
@@ -1975,41 +2106,6 @@ Return Value:
     }
 
     return {};
-}
-
-std::string UtilParseVirtiofsMountSource(std::string_view Source)
-
-/*++
-
-Routine Description:
-
-    This routine parses the mount source to determine the actual source of a
-    a VirtioFs mount.
-
-Arguments:
-
-    Source - Supplies the source string.
-
-Return Value:
-
-    The mount source, or NULL if the source is not valid.
-
---*/
-
-{
-    std::string MountSource{};
-    if (wsl::shared::string::StartsWith(Source, LX_INIT_DRVFS_ADMIN_VIRTIO_TAG) && (Source.size() >= sizeof(LX_INIT_DRVFS_ADMIN_VIRTIO_TAG)))
-    {
-        MountSource = Source[sizeof(LX_INIT_DRVFS_ADMIN_VIRTIO_TAG) - 1];
-        MountSource += ":";
-    }
-    else if (wsl::shared::string::StartsWith(Source, LX_INIT_DRVFS_VIRTIO_TAG) && (Source.size() >= sizeof(LX_INIT_DRVFS_VIRTIO_TAG)))
-    {
-        MountSource = Source[sizeof(LX_INIT_DRVFS_VIRTIO_TAG) - 1];
-        MountSource += ":";
-    }
-
-    return MountSource;
 }
 
 std::vector<char> UtilParseWslEnv(char* NtEnvironment)
@@ -2540,13 +2636,38 @@ int UtilSaveBlockedSignals(const sigset_t& SignalMask)
     return sigprocmask(SIG_BLOCK, &SignalMask, &g_originalSignals);
 }
 
+// Returns true for signals that should not be saved/restored:
+// SIGKILL/SIGSTOP — not settable per POSIX.
+// SIGCONT — left at default to allow process resumption.
+// SIGHUP — handled separately by the caller.
+// 32-34 — internal NPTL signals (__SIGRTMIN through __SIGRTMIN+2) reserved
+//         by glibc for thread cancellation and other runtime use.
+static bool SkipSignal(unsigned int Signal)
+{
+    switch (Signal)
+    {
+    case SIGKILL:
+    case SIGSTOP:
+    case SIGCONT:
+    case SIGHUP:
+    case 32:
+    case 33:
+    case 34:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 int UtilSaveSignalHandlers(struct sigaction* SavedSignalActions)
 
 /*++
 
 Routine Description:
 
-    This routine saves all settable signal handlers except SIGHUP.
+    This routine saves all settable signal handlers, skipping signals
+    listed in SkipSignal() (non-settable, SIGHUP, and internal NPTL signals).
 
 Arguments:
 
@@ -2561,15 +2682,8 @@ Return Value:
 {
     for (unsigned int Index = 1; Index < _NSIG; Index += 1)
     {
-        switch (Index)
+        if (SkipSignal(Index))
         {
-        case SIGKILL:
-        case SIGSTOP:
-        case SIGCONT:
-        case SIGHUP:
-        case 32:
-        case 33:
-        case 34:
             continue;
         }
 
@@ -2588,8 +2702,8 @@ int UtilSetSignalHandlers(struct sigaction* SavedSignalActions, bool Ignore)
 
 Routine Description:
 
-    This routine sets all settable signal handlers except SIGHUP to the given
-    handler.
+    This routine sets all settable signal handlers to the given handler,
+    skipping signals listed in SkipSignal().
 
 Arguments:
 
@@ -2608,15 +2722,8 @@ Return Value:
 
     for (unsigned int Index = 1; Index < _NSIG; Index += 1)
     {
-        switch (Index)
+        if (SkipSignal(Index))
         {
-        case SIGKILL:
-        case SIGSTOP:
-        case SIGCONT:
-        case SIGHUP:
-        case 32:
-        case 33:
-        case 34:
             continue;
         }
 
@@ -2853,14 +2960,16 @@ Return Value:
         std::string TranslatedPath = WslPathTranslate(Path, 0, Mode);
         if (TranslatedPath.empty())
         {
+            auto WarningMessage = wsl::shared::Localization::MessageFailedToTranslate(Path);
             if (wil::ScopedWarningsCollector::CanCollectWarning())
             {
-                EMIT_USER_WARNING(wsl::shared::Localization::MessageFailedToTranslate(Path));
+                EMIT_USER_WARNING(std::move(WarningMessage));
             }
             else
             {
-                LOG_ERROR("Failed to translate {}", Path);
+                LOG_WARNING("{}", WarningMessage);
             }
+
             continue;
         }
 
@@ -2894,7 +3003,7 @@ Arguments:
     Path - Supplies the path to translate.
 
     Reverse - Supplies a bool, if set perform translation from Windows->Linux
-        path, otherwise translation from Linux->Windows path.
+        path; otherwise, translation from Linux->Windows path.
 
 Return Value:
 
@@ -3015,7 +3124,7 @@ Arguments:
     Path - Supplies the path to translate.
 
     Reverse - Supplies a bool, if set perform translation from Windows->Linux
-        path, otherwise translation from Linux->Windows path.
+        path; otherwise, translation from Linux->Windows path.
 
 Return Value:
 
@@ -3059,8 +3168,21 @@ try
     }
     else
     {
+        auto matchesPrefix = [Path](const std::string_view& prefix) {
+            if (!wsl::shared::string::StartsWith(Path, prefix, true))
+            {
+                return false;
+            }
+
+            // Validate that the next character is a path separator or the end of the string to prevent matching other distribution paths like:
+            // \\wsl.localhost\<distro-name>-<suffix>
+
+            auto nextChar = Path[prefix.size()];
+            return nextChar == '\0' || nextChar == PATH_SEP || nextChar == PATH_SEP_NT;
+        };
+
         auto PrefixLength = Prefix.length();
-        if (!wsl::shared::string::StartsWith(Path, Prefix, true))
+        if (!matchesPrefix(Prefix))
         {
             //
             // Check the old \\wsl$ prefix if it's not \\wsl.localhost.
@@ -3068,7 +3190,7 @@ try
 
             std::string CompatPrefix{PLAN9_RDR_COMPAT_PREFIX};
             CompatPrefix += DistributionName;
-            if (!wsl::shared::string::StartsWith(Path, CompatPrefix, true))
+            if (!matchesPrefix(CompatPrefix))
             {
                 return {};
             }
@@ -3217,6 +3339,22 @@ std::string UtilReadFileContent(std::string_view path)
     return {std::istreambuf_iterator<char>(file), {}};
 }
 
+HvPciSwiotlbPool UtilReadHvPciSwiotlbPool()
+{
+    HvPciSwiotlbPool pool{};
+    try
+    {
+        pool.Base = std::stoull(UtilReadFileContent("/sys/bus/vmbus/drivers/hv_pci/swiotlb_base"), nullptr, 0);
+        pool.Size = std::stoull(UtilReadFileContent("/sys/bus/vmbus/drivers/hv_pci/swiotlb_size"), nullptr, 0);
+    }
+    catch (...)
+    {
+        pool = {};
+    }
+
+    return pool;
+}
+
 uint16_t UtilWinAfToLinuxAf(uint16_t WinAddressFamily)
 {
     uint16_t LinuxAddressFamily = AF_UNSPEC;
@@ -3234,7 +3372,7 @@ uint16_t UtilWinAfToLinuxAf(uint16_t WinAddressFamily)
     return LinuxAddressFamily;
 }
 
-int WriteToFile(const char* Path, const char* Content, int permissions)
+int WriteToFile(const char* Path, const char* Content, int OpenFlags, int Permissions)
 
 /*++
 
@@ -3248,6 +3386,10 @@ Arguments:
 
     Content - Supplies the content to be written to the file.
 
+    OpenFlags - Supplies the flags passed to open().
+
+    Permissions - Supplies the file mode used when O_CREAT causes the file to be created.
+
 Return Value:
 
     0 on success, -1 on failure.
@@ -3255,7 +3397,7 @@ Return Value:
 --*/
 
 {
-    wil::unique_fd Fd{open(Path, (O_WRONLY | O_CLOEXEC | O_CREAT), permissions)};
+    wil::unique_fd Fd{open(Path, OpenFlags, Permissions)};
     if (!Fd)
     {
         int errnoPrev = errno;
@@ -3277,7 +3419,7 @@ Return Value:
     return 0;
 }
 
-int ProcessCreateProcessMessage(wsl::shared::SocketChannel& channel, gsl::span<gsl::byte> Buffer)
+int ProcessCreateProcessMessage(wsl::shared::Transaction& Transaction, gsl::span<gsl::byte> Buffer)
 {
     auto* Message = gslhelpers::try_get_struct<CREATE_PROCESS_MESSAGE>(Buffer);
     if (!Message)
@@ -3286,7 +3428,7 @@ int ProcessCreateProcessMessage(wsl::shared::SocketChannel& channel, gsl::span<g
         return -1;
     }
 
-    auto sendResult = [&](unsigned long Result) { channel.SendResultMessage<int32_t>(Result); };
+    auto sendResult = [&](unsigned long Result) { Transaction.SendResultMessage<int32_t>(Result); };
 
     sockaddr_vm SocketAddress{};
     wil::unique_fd ListenSocket{UtilListenVsockAnyPort(&SocketAddress, 1, false)};
@@ -3350,7 +3492,7 @@ int ProcessCreateProcessMessage(wsl::shared::SocketChannel& channel, gsl::span<g
     }
     else if (execResult == sizeof(execResult))
     {
-        // Otherwise return the error code to the service
+        // Otherwise, return the error code to the service
         execResult = abs(execResult);
     }
     else
@@ -3360,3 +3502,240 @@ int ProcessCreateProcessMessage(wsl::shared::SocketChannel& channel, gsl::span<g
 
     return 0;
 }
+
+#define RECLAIM_PATH CGROUP_MOUNTPOINT "/memory.reclaim"
+
+static long long int GetUserCpuTime()
+
+/*++
+
+Routine Description:
+
+    This routine parses /proc/stat to query a summary of all user CPU time.
+
+Arguments:
+
+    None.
+
+Return Value:
+
+    The current user CPU counter for all cores.
+
+--*/
+
+{
+    wil::unique_fd Fd{open("/proc/stat", O_RDONLY)};
+    if (!Fd)
+    {
+        LOG_ERROR("open failed {}", errno);
+        return -1;
+    }
+
+    char Buffer[32];
+    int Result = TEMP_FAILURE_RETRY(read(Fd.get(), Buffer, (sizeof(Buffer) - 1)));
+    if (Result <= 0)
+    {
+        LOG_ERROR("read failed {}", errno);
+        return -1;
+    }
+
+    //
+    // Parse the first line of /proc/stat which is in the format
+    // "cpu  <counter>".
+    //
+
+    Buffer[Result] = '\0';
+    char* Sp1;
+    char* Info = strtok_r(Buffer, " \n", &Sp1);
+    if (Info == nullptr)
+    {
+        LOG_ERROR("/proc/stat first line missing cpu label");
+        return -1;
+    }
+
+    Info = strtok_r(nullptr, " \n", &Sp1);
+    if (Info == nullptr)
+    {
+        LOG_ERROR("/proc/stat first line missing cpu counter");
+        return -1;
+    }
+
+    return strtoll(Info, nullptr, 10);
+}
+
+static ssize_t GetMemoryInUse()
+
+/*++
+
+Routine Description:
+
+    This routine returns the amount memory in use in bytes.
+
+Arguments:
+
+    None.
+
+Return Value:
+
+    Total memory - Free memory. Includes that used by cache and buffers.
+
+--*/
+
+try
+{
+    struct sysinfo Info = {};
+    THROW_LAST_ERROR_IF(sysinfo(&Info) < 0);
+    return (Info.totalram - Info.freeram) * Info.mem_unit;
+}
+CATCH_RETURN_ERRNO()
+
+void StartMemoryReductionThread(LX_MINI_INIT_MEMORY_RECLAIM_MODE Mode)
+
+/*++
+
+Routine Description:
+
+    This routine starts a background thread that performs memory compaction and optional cache/memory
+    reclaim when the VM is idle. This ensures that the maximum number of pages can be discarded to the host.
+
+Arguments:
+
+    Mode - Supplies the memory reclaim mode.
+
+Return Value:
+
+    None.
+
+--*/
+
+try
+{
+    std::thread([Mode = Mode]() mutable {
+        try
+        {
+            //
+            // Set the thread's scheduling policy to idle.
+            //
+
+            sched_param Parameter{};
+            Parameter.sched_priority = 0;
+            const int Result = pthread_setschedparam(pthread_self(), SCHED_IDLE, &Parameter);
+            THROW_ERRNO_IF(Result, Result != 0);
+
+            //
+            // Periodically check if the machine is idle by querying procfs for CPU usage.
+            // Memory compaction will occur if both of the following conditions are true:
+            //     1. The CPU time since the last check is greater than the idle threshold.
+            //     2. The current CPU usage is below the idle threshold. This is measured by taking two readings one second apart.
+            //
+
+            double MemoryLow = 1024 * 1024 * 1024;
+            double MemoryHigh = 1.1 * 1024.0 * 1024.0 * 1024.0;
+            const int IdleThreshold = get_nprocs(); // Change math to adjust if sysconf(_SC_CLK_TCK) != 100? Is 1%
+            long long int Start, Stop = 0;
+            auto constexpr SleepDuration = std::chrono::seconds(30);
+            size_t ReclaimIndex = 0;
+            long long int const ReclaimThreshold = (get_nprocs() * sysconf(_SC_CLK_TCK) * SleepDuration / std::chrono::seconds(1)) / 200; // 0.5%
+            long long int ReclaimWindow[20] = {}; // 10 minutes
+            long long int ReclaimWindowLength = COUNT_OF(ReclaimWindow);
+            bool ReclaimIdling = false;
+
+            //
+            // Fall back to drop cache if the required cgroup path is not present.
+            //
+
+            if (Mode == LxMiniInitMemoryReclaimModeGradual && access(RECLAIM_PATH, W_OK) < 0)
+            {
+                LOG_WARNING("access({}, W_OK) failed {}, falling back to drop_caches", RECLAIM_PATH, errno);
+                Mode = LxMiniInitMemoryReclaimModeDropCache;
+            }
+
+            if (Mode == LxMiniInitMemoryReclaimModeGradual)
+            {
+                static_assert(COUNT_OF(ReclaimWindow) >= 6);
+                ReclaimWindowLength = 6; // Set to 3 minutes.
+            }
+
+            for (auto i = 1; i < ReclaimWindowLength; i++)
+            {
+                ReclaimWindow[i] = LLONG_MIN;
+            }
+
+            std::this_thread::sleep_for(SleepDuration);
+            for (;;)
+            {
+                auto const Target = std::chrono::steady_clock::now() + SleepDuration;
+                Start = GetUserCpuTime();
+                THROW_LAST_ERROR_IF(Start == -1);
+
+                if (Mode != LxMiniInitMemoryReclaimModeDisabled)
+                {
+                    //
+                    // Ensure that utilization is below 0.5% from the last 30 seconds, and last n minutes, of usage.
+                    //
+
+                    size_t const LastIndex = (ReclaimIndex + 1) % ReclaimWindowLength;
+                    if ((ReclaimWindow[LastIndex] > Start - ReclaimThreshold * (ReclaimWindowLength + 1)) &&
+                        (ReclaimWindow[ReclaimIndex] > Start - ReclaimThreshold))
+                    {
+                        if (Mode == LxMiniInitMemoryReclaimModeGradual)
+                        {
+                            double MemorySize = GetMemoryInUse();
+                            THROW_LAST_ERROR_IF(MemorySize < 0);
+
+                            if (MemorySize > MemoryHigh)
+                            {
+                                ReclaimIdling = false;
+                            }
+
+                            if (!ReclaimIdling && MemorySize > MemoryLow)
+                            {
+                                double MemoryTargetSize = MemorySize * 0.97;
+                                std::string MemoryToFree = std::to_string(size_t(MemorySize - MemoryTargetSize));
+                                // EAGAIN Means that it attempted, but was unable to evict sufficient pages.
+                                THROW_LAST_ERROR_IF(WriteToFile(RECLAIM_PATH, MemoryToFree.c_str()) < 0 && errno != EAGAIN);
+
+                                if (MemoryTargetSize < MemoryLow)
+                                {
+                                    ReclaimIdling = true;
+                                }
+                            }
+                        }
+                        else if (!ReclaimIdling)
+                        {
+                            ReclaimIdling = true;
+                            THROW_LAST_ERROR_IF(WriteToFile("/proc/sys/vm/drop_caches", "1\n") < 0);
+                        }
+                    }
+                    else
+                    {
+                        ReclaimIdling = false;
+                    }
+
+                    ReclaimIndex = LastIndex;
+                    ReclaimWindow[ReclaimIndex] = Start;
+                }
+
+                //
+                // Perform memory compaction if the VM is idle.
+                // This coalesces free pages into larger blocks for more efficient page reporting.
+                //
+
+                if ((Start - Stop) > IdleThreshold)
+                {
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    Stop = GetUserCpuTime();
+                    THROW_LAST_ERROR_IF(Stop == -1);
+                    if ((Stop - Start) < IdleThreshold)
+                    {
+                        THROW_LAST_ERROR_IF(WriteToFile("/proc/sys/vm/compact_memory", "1\n") < 0);
+                    }
+                }
+
+                std::this_thread::sleep_until(Target);
+            }
+        }
+        CATCH_LOG()
+    }).detach();
+}
+CATCH_LOG()

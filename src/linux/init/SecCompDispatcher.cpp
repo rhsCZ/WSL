@@ -77,7 +77,9 @@ void SecCompDispatcher::Run()
     for (;;)
     {
         if (!wait_for_fd(m_notifyFd.get(), POLLIN))
+        {
             break;
+        }
 
         // Clear the buffers to make the 5.15 kernel happy.
         notification_buffer.clear();
@@ -102,8 +104,8 @@ void SecCompDispatcher::Run()
         }
         int result = 0;
         GNS_LOG_INFO(
-            "Notified for arch {:X} syscall {} with id {}lu for pid {} with args ({}lX, {}lX, {}lX, {}lX, {}lX, "
-            "{}lX)",
+            "Notified for arch {:X} syscall {} with id {} for pid {} with args ({:X}, {:X}, {:X}, {:X}, {:X}, "
+            "{:X})",
             callInfo->data.arch,
             callInfo->data.nr,
             callInfo->id,
@@ -138,14 +140,14 @@ void SecCompDispatcher::Run()
         resultInfo->val = 0;
         resultInfo->flags = result == 0 ? SECCOMP_USER_NOTIF_FLAG_CONTINUE : 0;
 
-        GNS_LOG_INFO("Responding to notification with id {}lu for pid {}, result {}", callInfo->id, callInfo->pid, result);
+        GNS_LOG_INFO("Responding to notification with id {} for pid {}, result {}", callInfo->id, callInfo->pid, result);
         try
         {
             Syscall(ioctl, m_notifyFd.get(), SECCOMP_IOCTL_NOTIF_SEND, resultInfo);
         }
         catch (std::exception& e)
         {
-            GNS_LOG_ERROR("Failed to respond to notification with id {}lu for pid {}, {}", callInfo->id, callInfo->pid, e.what());
+            GNS_LOG_ERROR("Failed to respond to notification with id {} for pid {}, {}", callInfo->id, callInfo->pid, e.what());
         }
     }
 }
@@ -209,7 +211,7 @@ std::optional<std::vector<gsl::byte>> SecCompDispatcher::ReadProcessMemory(uint6
     }
     catch (std::exception& e)
     {
-        GNS_LOG_ERROR("Failed to read process memory for pid {}, cookie {}u, {}", Pid, Cookie, e.what());
+        GNS_LOG_ERROR("Failed to read process memory for pid {}, cookie {}, {}", Pid, Cookie, e.what());
         return std::nullopt;
     }
 }

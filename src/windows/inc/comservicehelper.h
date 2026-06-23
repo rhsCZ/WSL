@@ -59,7 +59,7 @@ namespace Windows { namespace Internal {
             }
             else
             {
-                // Otherwise take a reference on the MTA apartment.
+                // Otherwise, take a reference on the MTA apartment.
                 m_hrMtaInitialized = CoIncrementMTAUsage(&m_mtaUsageCookie);
             }
             RETURN_IF_FAILED(m_hrMtaInitialized);
@@ -77,7 +77,7 @@ namespace Windows { namespace Internal {
             // Tell COM how to mask fatal exceptions.
             if (ownProcess)
             {
-                Microsoft::WRL::ComPtr<IGlobalOptions> pIGLB;
+                wil::com_ptr<IGlobalOptions> pIGLB;
                 RETURN_IF_FAILED(CoCreateInstance(CLSID_GlobalOptions, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pIGLB)));
                 RETURN_IF_FAILED(pIGLB->Set(COMGLB_EXCEPTION_HANDLING, TExceptionPolicy));
             }
@@ -277,7 +277,7 @@ namespace Windows { namespace Internal {
             RETURN_IF_WIN32_BOOL_FALSE(MakeAbsoluteSD(
                 pSDRelative, pSDAbsolute, &cbSDAbsolute, pDacl, &cbDacl, pSacl, &cbSacl, pOwner, &cbOwner, pPrimaryGroup, &cbPrimaryGroup));
 
-            // ...and now we can call CoInitializeSecuirity
+            // ...and now we can call CoInitializeSecurity
             RETURN_IF_FAILED(CoInitializeSecurity(
                 pSDAbsolute, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IDENTIFY, NULL, EOAC_NONE, nullptr));
 
@@ -294,9 +294,9 @@ namespace Windows { namespace Internal {
         bool m_addedModuleReference = false;
 
         // COM callback object to support unloading shared-process services
-        Microsoft::WRL::ComPtr<IContextCallback> m_icc;
+        wil::com_ptr<IContextCallback> m_icc;
 
-        // COM Server descritptor
+        // COM Server descriptor
         ServerDescriptor m_serverDescriptor{};
     };
 
@@ -644,7 +644,7 @@ namespace Windows { namespace Internal {
                     // control codes to the service.
                     //
                     // We stop asynchronously to have the same codepath as system
-                    // stop requestes.
+                    // stop requests.
                     //
                     reinterpret_cast<TBase*>(this)->OnSystemShutdown();
                     StopAsync();

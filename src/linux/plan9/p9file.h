@@ -18,7 +18,7 @@ struct Root final : public IRoot
 {
     Root(std::shared_ptr<const Share> share, int rootFd, uid_t uid, gid_t gid) : Share{share}, RootFd{rootFd}, Uid{uid}, Gid{gid}
     {
-        Plan9TraceLoggingProvider::LogMessage(std::format("Instanciate root, uid={}", uid));
+        Plan9TraceLoggingProvider::LogMessage(std::format("Instantiate root, uid={}", uid));
         if (uid == -1)
         {
             return; // No uid passed, don't try to get the additional groups.
@@ -33,7 +33,7 @@ struct Root final : public IRoot
         std::vector<char> buffer(bufsize);
         passwd pwd{};
         passwd* result = nullptr;
-        if (getpwuid_r(uid, &pwd, buffer.data(), buffer.size(), &result) < 0 || result == nullptr)
+        if (getpwuid_r(uid, &pwd, buffer.data(), buffer.size(), &result) != 0 || result == nullptr)
         {
             Plan9TraceLoggingProvider::LogMessage(std::format("getpwuid_r failed for uid: {}, errno={}", uid, errno));
             return;

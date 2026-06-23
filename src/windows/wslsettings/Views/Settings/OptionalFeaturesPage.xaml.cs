@@ -1,5 +1,6 @@
 ﻿// Copyright (C) Microsoft Corporation. All rights reserved.
 
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -26,6 +27,14 @@ public sealed partial class OptionalFeaturesPage : Page
                 FrameworkElementAutomationPeer.FromElement(Settings_ErrorTryAgainLater).RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
             }
         });
+
+        this.Loaded += OnPageLoaded;
+    }
+
+    private void OnPageLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        OptionalFeaturesPageRoot.Focus(FocusState.Programmatic);
+        RuntimeHelper.SetupExpanderFocusManagementByName(this, "VMIdleTimeoutExpander", "VMIdleTimeoutTextBox");
     }
 
     override protected void OnNavigatedFrom(NavigationEventArgs e)
@@ -40,7 +49,7 @@ public sealed partial class OptionalFeaturesPage : Page
             return;
         }
 
-        RuntimeHelper.TryMoveFocusPrevousControl(sender as Button);
+        RuntimeHelper.TryMoveFocusPreviousControl(sender as Button);
     }
 
     private void VMIdleTimeoutTextBox_TextChanged(object sender, TextChangedEventArgs e)

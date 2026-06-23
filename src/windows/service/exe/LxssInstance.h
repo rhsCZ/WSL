@@ -112,7 +112,7 @@ public:
 
     /// <summary>
     /// Registers connection targets with the Plan 9 Redirector for the calling user, if they're
-    /// not already regsistered.
+    /// not already registered.
     /// </summary>
     void RegisterPlan9ConnectionTarget(_In_ HANDLE userToken) override;
 
@@ -223,11 +223,6 @@ private:
     /// Provides iptables emulation support.
     /// </summary>
     LxssIpTables m_ipTables;
-
-    /// <summary>
-    /// Class for querying host dns information.
-    /// </summary>
-    wsl::core::networking::HostDnsInfo m_dnsInfo;
 
     /// <summary>
     /// Settings for updating /etc/resolv.conf.

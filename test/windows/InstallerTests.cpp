@@ -18,6 +18,7 @@ Abstract:
 #include "Common.h"
 #include "registry.hpp"
 #include "PluginTests.h"
+#include "wslcsdk.h"
 
 using namespace wsl::windows::common::registry;
 
@@ -175,17 +176,27 @@ class InstallerTests
         return wsl::windows::common::registry::ReadString(m_lxssKey.get(), L"MSI", L"ProductCode", L"");
     }
 
+    // Release any in-process COM DLLs (e.g. wslserviceproxystub.dll loaded by prior tests)
+    // so the Restart Manager doesn't detect the test process as holding files.
+    // This avoids install failures on older Server SKUs where the RM has stricter silent-mode behavior.
+    static void PrepareForMsiOperation()
+    {
+        CoFreeUnusedLibrariesEx(0, 0);
+    }
+
     void UninstallMsi()
     {
+        PrepareForMsiOperation();
         auto productCode = GetMsiProductCode();
         VERIFY_IS_FALSE(productCode.empty());
 
-        CallMsiExec(std::format(L"/qn /norestart /x {} /L*V {}", productCode, GenerateMsiLogPath()));
+        CallMsiExec(std::format(L"/qn /norestart /x \"{}\" /L*V \"{}\"", productCode, GenerateMsiLogPath()));
     }
 
     void InstallMsi()
     {
-        CallMsiExec(std::format(L"/qn /norestart /i {} /L*V {}", m_msiPath, GenerateMsiLogPath()));
+        PrepareForMsiOperation();
+        CallMsiExec(std::format(L"/qn /norestart /i \"{}\" /L*V \"{}\"", m_msiPath, GenerateMsiLogPath()));
     }
 
     void InstallMsix() const
@@ -249,7 +260,9 @@ class InstallerTests
 
         try
         {
-            wsl::shared::retry::RetryWithTimeout<void>(pred, std::chrono::seconds(1), std::chrono::minutes(2));
+            // It is possible for the 'DeprovisionMsix' stage of the MSI installation to take a long time.
+            // On vb_release, up to 7 minutes have been observed. Wait for up to 20 minutes to be safe.
+            wsl::shared::retry::RetryWithTimeout<void>(pred, std::chrono::seconds(1), std::chrono::minutes(20));
         }
         catch (...)
         {
@@ -283,9 +296,9 @@ class InstallerTests
         }
     }
 
-    void ValidatePackageInstalledProperly()
+    void ValidatePackageInstalledProperly(LPCWSTR expectedVersion = WIDEN(WSL_PACKAGE_VERSION))
     {
-        ValidateInstalledVersion(WIDEN(WSL_PACKAGE_VERSION));
+        ValidateInstalledVersion(expectedVersion);
 
         auto checkInstalled = []() {
             auto commandLine = LxssGenerateWslCommandLine(L"echo OK");
@@ -320,7 +333,7 @@ class InstallerTests
         const auto key = wsl::windows::common::registry::OpenLxssMachineKey();
         const auto version = wsl::windows::common::registry::ReadString(key.get(), L"MSI", L"Version", L"");
 
-        VERIFY_ARE_EQUAL(version, WIDEN(WSL_PACKAGE_VERSION));
+        VERIFY_ARE_EQUAL(version, expectedVersion);
         VERIFY_IS_FALSE(GetMsiProductCode().empty());
 
         // TODO: check wslsupport, wslapi and p9rdr
@@ -332,7 +345,7 @@ class InstallerTests
         wsl::windows::common::registry::DeleteKeyValue(msiKey.get(), L"ProductCode");
     }
 
-    void InstallGitubRelease(const std::wstring& version)
+    void InstallGitHubRelease(const std::wstring& version)
     {
         auto arch = wsl::shared::Arm64 ? L".0.arm64" : L".0.x64";
 
@@ -354,8 +367,8 @@ class InstallerTests
             LogInfo("Downloading: %ls", version.c_str());
 
             VERIFY_IS_TRUE(g_pipelineBuildId.empty()); // Pipeline builds should have the installers already available
-            auto release = wsl::windows::common::wslutil::GetGithubReleaseByTag(version);
-            auto asset = wsl::windows::common::wslutil::GetGithubAssetFromRelease(release);
+            auto release = wsl::windows::common::wslutil::GetGitHubReleaseByTag(version);
+            auto asset = wsl::windows::common::wslutil::GetGitHubAssetFromRelease(release);
             VERIFY_IS_TRUE(asset.has_value());
 
             auto downloadPath = wsl::windows::common::wslutil::DownloadFile(asset->second.url, asset->second.name);
@@ -365,7 +378,8 @@ class InstallerTests
         LogInfo("Installing: %ls", installerFile.c_str());
         if (wsl::shared::string::EndsWith<wchar_t>(installerFile, L".msi"))
         {
-            CallMsiExec(std::format(L"/qn /norestart /i {} /L*V {}", installerFile, GenerateMsiLogPath()));
+            PrepareForMsiOperation();
+            CallMsiExec(std::format(L"/qn /norestart /i \"{}\" /L*V \"{}\"", installerFile, GenerateMsiLogPath()));
         }
         else
         {
@@ -383,9 +397,9 @@ class InstallerTests
     TEST_METHOD(UpgradeFromWsl130)
     {
         UninstallMsi();
-        InstallGitubRelease(L"1.3.17");
+        InstallGitHubRelease(L"1.3.17");
 
-        // Note: we can't use wsl --update here because GithubUrlOverride was introduced in 2.0.0
+        // Note: we can't use wsl --update here because GitHubUrlOverride was introduced in 2.0.0
         InstallMsi();
         ValidatePackageInstalledProperly();
     }
@@ -395,7 +409,7 @@ class InstallerTests
         UninstallMsi();
 
         // Note: we can't use wsl --update here because wsl 2.0.0 passes REINSTALL=ALL to msiexec
-        InstallGitubRelease(L"2.0.0");
+        InstallGitHubRelease(L"2.0.0");
         InstallMsi();
         ValidatePackageInstalledProperly();
     }
@@ -403,8 +417,43 @@ class InstallerTests
     TEST_METHOD(UpgradeFromWsl202)
     {
         UninstallMsi();
-        InstallGitubRelease(L"2.0.2");
+        InstallGitHubRelease(L"2.0.2");
         CallWslUpdateViaMsi();
+    }
+
+    WSLC_TEST_METHOD(WslcSdkVersionDetection)
+    {
+        auto restore = wil::scope_exit([this]() { InstallMsi(); });
+
+        UninstallMsi();
+
+        // Validate that the SDK detects that the WSL package is not installed.
+        WslcComponentFlags flags{};
+        VERIFY_SUCCEEDED(WslcGetMissingComponents(&flags));
+        VERIFY_ARE_EQUAL(flags, WSLC_COMPONENT_FLAG_WSL_PACKAGE);
+
+        // Validate that the SDK detects that the installed version of WSL is too old.
+        InstallGitHubRelease(L"2.0.2");
+
+        VERIFY_SUCCEEDED(WslcGetMissingComponents(&flags));
+        VERIFY_ARE_EQUAL(flags, WSLC_COMPONENT_FLAG_WSL_PACKAGE);
+
+        restore.reset();
+
+        // Validate that the SDK supports the current package.
+        VERIFY_SUCCEEDED(WslcGetMissingComponents(&flags));
+        VERIFY_ARE_EQUAL(flags, 0);
+
+        // TODO: Add test coverage for a more recent version of the package that doesn't support the SDK, if ever needed.
+        // In the meantime, the below block can be commented to manual test this scenario with a manual code change.
+        /*VERIFY_SUCCEEDED(WslcGetMissingComponents(&flags));
+        VERIFY_ARE_EQUAL(flags, WSLC_COMPONENT_FLAG_SDK_NEEDS_UPDATE);
+
+        WslcSessionSettings sessionSettings{};
+        VERIFY_SUCCEEDED(WslcInitSessionSettings(L"should-fail", L"C:\\", &sessionSettings));
+
+        WslcSession session{};
+        VERIFY_ARE_EQUAL(WslcCreateSession(&sessionSettings, &session, nullptr), WSLC_E_SDK_UPDATE_NEEDED);*/
     }
 
     TEST_METHOD(MsrdcPluginKey)
@@ -651,7 +700,7 @@ class InstallerTests
         RegistryKeyChange<std::wstring> change(
             HKEY_LOCAL_MACHINE, L"Software\\Microsoft\\Windows\\CurrentVersion\\Lxss", wsl::windows::common::wslutil::c_githubUrlOverrideRegistryValue, endpoint);
 
-        constexpr auto GithubApiResponse =
+        constexpr auto GitHubApiResponse =
             LR"({
                     \"name\": \"1.0.0\",
                     \"created_at\": \"2023-06-14T16:56:30Z\",
@@ -664,7 +713,7 @@ class InstallerTests
                      ]
                  })";
 
-        UniqueWebServer server(endpoint, GithubApiResponse);
+        UniqueWebServer server(endpoint, GitHubApiResponse);
 
         auto [out, _] = LxsstuLaunchWslAndCaptureOutput(L"--update");
         VERIFY_ARE_EQUAL(
@@ -706,7 +755,7 @@ class InstallerTests
         ValidatePackageInstalledProperly();
     }
 
-    TEST_METHOD(InstallremovesStaleServiceRegistration)
+    TEST_METHOD(InstallRemovesStaleServiceRegistration)
     {
         // Remove the MSI package.
         UninstallMsi();
@@ -885,6 +934,47 @@ class InstallerTests
         VERIFY_IS_FALSE(SfcIsKeyProtected(HKEY_LOCAL_MACHINE, keyPath, KEY_WOW64_64KEY));
     }
 
+    void ValidateDcatRegistration()
+    {
+        const auto versionValue =
+            wsl::windows::common::registry::ReadString(HKEY_LOCAL_MACHINE, WIDEN(DCAT_REGISTRATION_KEY), L"Version");
+        VERIFY_ARE_EQUAL(versionValue, WIDEN(WSL_PACKAGE_VERSION));
+    }
+
+    TEST_METHOD(InstallerRegistersWithDcat)
+    {
+        // Uninstalling should remove the registration
+        UninstallMsi();
+        VERIFY_IS_FALSE(IsMsiPackageInstalled());
+        VERIFY_IS_FALSE(IsMsixInstalled());
+
+        VERIFY_ARE_EQUAL(
+            wsl::windows::common::registry::OpenKeyNoThrow(HKEY_LOCAL_MACHINE, WIDEN(DCAT_REGISTRATION_KEY), KEY_READ).second,
+            HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
+
+        // Installing should add the registration
+        InstallMsi();
+        VERIFY_IS_TRUE(IsMsiPackageInstalled());
+        VERIFY_IS_TRUE(IsMsixInstalled());
+
+        ValidateDcatRegistration();
+    }
+
+    TEST_METHOD(ServiceRemediatesDcatRegistration)
+    {
+        // Starting the service should create the registration if it is missing
+        StopWslService();
+        VERIFY_ARE_EQUAL(wsl::windows::common::registry::DeleteKey(HKEY_LOCAL_MACHINE, WIDEN(DCAT_REGISTRATION_KEY)), true);
+        VERIFY_ARE_EQUAL(LxsstuLaunchWsl(L"--list"), 0);
+        ValidateDcatRegistration();
+
+        // Starting the service should fix the registration if needed
+        StopWslService();
+        wsl::windows::common::registry::WriteString(HKEY_LOCAL_MACHINE, WIDEN(DCAT_REGISTRATION_KEY), L"Version", L"1.0.0");
+        VERIFY_ARE_EQUAL(LxsstuLaunchWsl(L"--list"), 0);
+        ValidateDcatRegistration();
+    }
+
     void CallWslUpdateViaMsi()
     {
 
@@ -899,7 +989,7 @@ class InstallerTests
         RegistryKeyChange<std::wstring> change(
             HKEY_LOCAL_MACHINE, L"Software\\Microsoft\\Windows\\CurrentVersion\\Lxss", wsl::windows::common::wslutil::c_githubUrlOverrideRegistryValue, endpoint);
 
-        constexpr auto GithubApiResponse =
+        constexpr auto GitHubApiResponse =
             LR"({
                     \"name\": \"999.0.0\",
                     \"created_at\": \"2023-06-14T16:56:30Z\",
@@ -912,7 +1002,7 @@ class InstallerTests
                      ]
                  })";
 
-        UniqueWebServer apiServer(endpoint, GithubApiResponse);
+        UniqueWebServer apiServer(endpoint, GitHubApiResponse);
         UniqueWebServer fileServer(L"http://127.0.0.1:12346/", std::filesystem::path(m_msiPath));
 
         // DeleteProductCode();
@@ -946,7 +1036,7 @@ class InstallerTests
         RegistryKeyChange<std::wstring> change(
             HKEY_LOCAL_MACHINE, L"Software\\Microsoft\\Windows\\CurrentVersion\\Lxss", wsl::windows::common::wslutil::c_githubUrlOverrideRegistryValue, endpoint);
 
-        constexpr auto GithubApiResponse =
+        constexpr auto GitHubApiResponse =
             LR"({
                     \"name\": \"999.0.0\",
                     \"created_at\": \"2023-06-14T16:56:30Z\",
@@ -959,7 +1049,7 @@ class InstallerTests
                      ]
                  })";
 
-        UniqueWebServer apiServer(endpoint, GithubApiResponse);
+        UniqueWebServer apiServer(endpoint, GitHubApiResponse);
         UniqueWebServer fileServer(L"http://127.0.0.1:12346/", std::filesystem::path(m_msixPackagePath));
 
         UninstallMsix();

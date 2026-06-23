@@ -116,10 +116,15 @@ int InitConnectToServer(int LxBusFd, bool WaitForServer);
 int InitCreateProcessUtilityVm(
     gsl::span<gsl::byte> Message,
     const LX_INIT_CREATE_PROCESS_UTILITY_VM& Header,
-    wsl::shared::SocketChannel& MessageFd,
+    wsl::shared::Transaction& Transaction,
     const wsl::linux::WslDistributionConfig& Config);
 
-int InitCreateSessionLeader(gsl::span<gsl::byte> Buffer, wsl::shared::SocketChannel& Channel, int LxBusFd, wsl::linux::WslDistributionConfig& Config);
+int InitCreateSessionLeader(
+    gsl::span<gsl::byte> Buffer,
+    wsl::shared::SocketChannel& Channel,
+    const std::function<void(LX_INIT_CREATE_SESSION_RESPONSE&)>& SendResponse,
+    int LxBusFd,
+    wsl::linux::WslDistributionConfig& Config);
 
 void InitEntry(int Argc, char* Argv[]);
 
@@ -127,9 +132,13 @@ void InitEntryWsl(wsl::linux::WslDistributionConfig& Config);
 
 void InitEntryUtilityVm(wsl::linux::WslDistributionConfig& Config);
 
-void InitTerminateInstance(gsl::span<gsl::byte> Buffer, wsl::shared::SocketChannel& Channel, wsl::linux::WslDistributionConfig& Config);
+void InitTerminateInstance(gsl::span<gsl::byte> Buffer, const std::function<void(bool)>& SendResult, wsl::linux::WslDistributionConfig& Config);
+
+void InitTerminateInstanceInternal(const wsl::linux::WslDistributionConfig& Config);
 
 void InstallSystemdUnit(const char* Path, const std::string& Name, const char* Content);
+
+void LockBinfmtStatusReadOnly();
 
 int GenerateSystemdUnits(int Argc, char** Argv);
 
@@ -152,6 +161,10 @@ unsigned int StartGns(int Argc, char** Argv);
 void WaitForBootProcess(wsl::linux::WslDistributionConfig& Config);
 
 wil::unique_fd UnmarshalConsoleFromServer(int MessageFd, LXBUS_IPC_CONSOLE_ID ConsoleId);
+
+int WslInitWatcher(int Argc, char** Argv);
+
+int WslcGpuHookEntry();
 
 int WslEntryPoint(int Argc, char* Argv[])
 {
@@ -215,10 +228,19 @@ int WslEntryPoint(int Argc, char* Argv[])
         {
             ExitCode = GenerateUserSystemdUnits(Argc, Argv);
         }
+        else if (strcmp(BaseName, LX_INIT_WSL_INIT_WATCHER) == 0)
+        {
+            ExitCode = WslInitWatcher(Argc, Argv);
+        }
+        else if (strcmp(BaseName, LX_INIT_WSLC_GPU_HOOK) == 0)
+        {
+            ExitCode = WslcGpuHookEntry();
+        }
         else
         {
             // Handle the special case for import result messages, everything else is sent to the binfmt interpreter.
             if (Pid == 1 && strcmp(BaseName, "init") == 0 && Argc == 3 && strcmp(Argv[1], LX_INIT_IMPORT_MESSAGE_ARG) == 0)
+            {
                 try
                 {
                     wsl::shared::MessageWriter<LX_MINI_INIT_IMPORT_RESULT> message;
@@ -228,7 +250,8 @@ int WslEntryPoint(int Argc, char* Argv[])
                     read(STDIN_FILENO, buffer, sizeof(buffer));
                     exit(0);
                 }
-            CATCH_RETURN_ERRNO()
+                CATCH_RETURN_ERRNO()
+            }
 
             ExitCode = CreateNtProcess(Argc - 1, &Argv[1]);
         }
@@ -307,8 +330,6 @@ int GenerateSystemdUnits(int Argc, char** Argv)
         LOG_INFO("Generating WSL systemd units in {}", installPath);
 
         bool enableGuiApps = true;
-        bool protectBinfmt = true;
-        bool interopEnabled = true;
         std::string automountRoot = "/mnt";
 
         wil::unique_file File{fopen("/etc/wsl.conf", "r")};
@@ -316,14 +337,23 @@ int GenerateSystemdUnits(int Argc, char** Argv)
         {
             std::vector<ConfigKey> ConfigKeys = {
                 ConfigKey(wsl::linux::c_ConfigEnableGuiAppsOption, enableGuiApps),
-                ConfigKey(wsl::linux::c_ConfigBootProtectBinfmtOption, protectBinfmt),
-                ConfigKey(wsl::linux::c_ConfigInteropEnabledOption, interopEnabled),
                 ConfigKey(wsl::linux::c_ConfigAutoMountRoot, automountRoot),
 
             };
             ParseConfigFile(ConfigKeys, File.get(), CFG_SKIP_UNKNOWN_VALUES, STRING_TO_WSTRING(CONFIG_FILE));
             File.reset();
         }
+
+        // Mask systemd-networkd-wait-online.service since WSL always ensures that networking is configured during boot.
+        // That unit can cause systemd boot timeouts since WSL's network interface is unmanaged by systemd.
+        THROW_LAST_ERROR_IF(symlink("/dev/null", std::format("{}/systemd-networkd-wait-online.service", installPath).c_str()) < 0);
+
+        // Mask NetworkManager-wait-online.service for the same reason, as it causes timeouts on distros using NetworkManager.
+        THROW_LAST_ERROR_IF(symlink("/dev/null", std::format("{}/NetworkManager-wait-online.service", installPath).c_str()) < 0);
+
+        // Mask console-getty.service since /dev/tty devices are shared at the VM level across all distros.
+        // When multiple distros are running, the second distro's getty fails because the tty is already held.
+        THROW_LAST_ERROR_IF(symlink("/dev/null", std::format("{}/console-getty.service", installPath).c_str()) < 0);
 
         // Only create the wslg unit if both enabled in wsl.conf, and if the wslg folder actually exists.
         if (enableGuiApps && access("/mnt/wslg/runtime-dir", F_OK) == 0)
@@ -350,38 +380,6 @@ ConditionPathExists=!/tmp/.X11-unix/X0
 Type=oneshot
 ExecStart=/bin/mount -o bind,ro,X-mount.mkdir -t none /mnt/wslg/.X11-unix /tmp/.X11-unix)";
             InstallSystemdUnit(installPath, "wslg", x11UnitContent);
-        }
-
-        if (interopEnabled && protectBinfmt)
-        {
-            // N.B. ExecStop is required to prevent distributions from removing the WSL binfmt entry on shutdown.
-            auto systemdBinfmtContent = std::format(
-                R"(# Note: This file is generated by WSL to prevent binfmt.d from overriding WSL's binfmt interpretor.
-# To disable this unit, add the following to /etc/wsl.conf:
-# [boot]
-# protectBinfmt=false
-
-[Service]
-ExecStop=
-ExecStart=/bin/sh -c '(echo -1 > {}/{}) ; (echo "{}" > {})' )",
-                BINFMT_MISC_MOUNT_TARGET,
-                LX_INIT_BINFMT_NAME_LATE,
-                BINFMT_INTEROP_REGISTRATION_STRING(LX_INIT_BINFMT_NAME_LATE),
-                BINFMT_MISC_REGISTER_FILE);
-
-            // Install the override for systemd-binfmt.service.
-            {
-                auto overrideFolder = std::format("{}/systemd-binfmt.service.d", installPath);
-                THROW_LAST_ERROR_IF(UtilMkdirPath(overrideFolder.c_str(), 0755) < 0);
-                THROW_LAST_ERROR_IF(WriteToFile(std::format("{}/override.conf", overrideFolder).c_str(), systemdBinfmtContent.c_str()) < 0);
-            }
-
-            // Install the override for binfmt-support.service.
-            {
-                auto overrideFolder = std::format("{}/binfmt-support.service.d", installPath);
-                THROW_LAST_ERROR_IF(UtilMkdirPath(overrideFolder.c_str(), 0755) < 0);
-                THROW_LAST_ERROR_IF(WriteToFile(std::format("{}/override.conf", overrideFolder).c_str(), systemdBinfmtContent.c_str()) < 0);
-            }
         }
 
         return 0;
@@ -412,7 +410,7 @@ try
     message.WriteString(Argv[2]);
     message->Timestamp = std::strtoull(Argv[1], nullptr, 10);
     message->Signal = std::strtoul(Argv[4], nullptr, 10);
-    message->Pid = std::strtoull(Argv[3], nullptr, 10);
+    message->Pid = std::strtoul(Argv[3], nullptr, 10);
 
     auto result = channel.Transaction<LX_PROCESS_CRASH>(message.Span()).Result;
     if (result != 0)
@@ -682,7 +680,7 @@ try
         }
 
         Common->Environment.AddVariable("DBUS_SESSION_BUS_ADDRESS", std::format("unix:path=/run/user/{}/bus", PasswordEntry->pw_uid));
-        Common->Environment.AddVariable(XDG_RUNTIME_DIR_ENV, std::format("/run/user/{}/", PasswordEntry->pw_uid));
+        Common->Environment.AddVariable(XDG_RUNTIME_DIR_ENV, std::format("/run/user/{}", PasswordEntry->pw_uid));
     }
 
     //
@@ -1096,7 +1094,12 @@ Return Value:
     return 0;
 }
 
-int InitCreateSessionLeader(gsl::span<gsl::byte> Buffer, wsl::shared::SocketChannel& Channel, int LxBusFd, wsl::linux::WslDistributionConfig& Config)
+int InitCreateSessionLeader(
+    gsl::span<gsl::byte> Buffer,
+    wsl::shared::SocketChannel& Channel,
+    const std::function<void(LX_INIT_CREATE_SESSION_RESPONSE&)>& SendResponse,
+    int LxBusFd,
+    wsl::linux::WslDistributionConfig& Config)
 
 /*++
 
@@ -1213,7 +1216,7 @@ try
         Response.Header.MessageType = LxInitMessageCreateSessionResponse;
         Response.Header.MessageSize = sizeof(Response);
         Response.Port = SocketAddress.svm_port;
-        Channel.SendMessage(Response);
+        SendResponse(Response);
 
         if (!ListenSocket)
         {
@@ -1314,7 +1317,7 @@ Return Value:
 int InitCreateProcessUtilityVm(
     gsl::span<gsl::byte> Span,
     const LX_INIT_CREATE_PROCESS_UTILITY_VM& CreateProcess,
-    wsl::shared::SocketChannel& Channel,
+    wsl::shared::Transaction& Transaction,
     const wsl::linux::WslDistributionConfig& Config)
 
 /*++
@@ -1399,7 +1402,7 @@ Return Value:
     // Tell the service which sockets ports to connect to.
     //
 
-    Channel.SendResultMessage<uint32_t>(SocketAddress.svm_port);
+    Transaction.SendResultMessage<uint32_t>(SocketAddress.svm_port);
 
     //
     // Exit if creating the listening socket failed.
@@ -1821,7 +1824,7 @@ Return Value:
                 if (BytesWritten < 0)
                 {
                     //
-                    // If writing on stdin's pipe would block, mark the write as pending an continue.
+                    // If writing on stdin's pipe would block, mark the write as pending and continue.
                     // This is required blocking on the write() could lead to a deadlock if the child process
                     // is blocking trying to write on stderr / stdout while the relay tries to write stdin.
                     //
@@ -1963,13 +1966,14 @@ Return Value:
                 continue;
             }
 
-            auto [Header, Span] = channel.ReceiveMessageOrClosed<MESSAGE_HEADER>();
+            auto transaction = channel.ReceiveTransaction();
+            auto [Header, Span] = transaction.ReceiveOrClosed<MESSAGE_HEADER>();
             if (Header != nullptr)
             {
                 try
                 {
                     ConfigHandleInteropMessage(
-                        channel, ControlChannel, WI_IsFlagSet(CreateProcess.Common.Flags, LxInitCreateProcessFlagsElevated), Span, Header, Config);
+                        transaction, ControlChannel, WI_IsFlagSet(CreateProcess.Common.Flags, LxInitCreateProcessFlagsElevated), Span, Header, Config);
                 }
                 CATCH_LOG();
             }
@@ -2239,11 +2243,27 @@ Return Value:
         unsetenv(LX_WSL2_DISTRO_READ_ONLY_ENV);
     }
 
-    const auto Value = getenv(LX_WSL2_NETWORKING_MODE_ENV);
+    auto Value = getenv(LX_WSL2_NETWORKING_MODE_ENV);
     if (Value != nullptr)
     {
         Config.NetworkingMode = static_cast<LX_MINI_INIT_NETWORKING_MODE>(std::atoi(Value));
         unsetenv(LX_WSL2_NETWORKING_MODE_ENV);
+    }
+
+    Value = getenv(LX_WSL2_VM_ID_ENV);
+    if (Value != nullptr)
+    {
+        Config.VmId = Value;
+
+        //
+        // Unset the environment variable for user distros.
+        //
+
+        Value = getenv(LX_WSL2_SHARED_MEMORY_OB_DIRECTORY);
+        if (!Value)
+        {
+            unsetenv(LX_WSL2_VM_ID_ENV);
+        }
     }
 
     //
@@ -2318,7 +2338,7 @@ Return Value:
             }
 
             //
-            // Initialize distro init agruments and environment.
+            // Initialize distro init arguments and environment.
             //
 
             auto InitializeStringVector = [&](std::vector<const char*>& PointerVector,
@@ -2341,6 +2361,14 @@ Return Value:
                 PointerVector.push_back(nullptr);
             };
 
+            // The wipe at systemd shutdown clears entries for every distro in
+            // the VM, not just the terminating one, so install the protection
+            // regardless of this distro's own InteropEnabled setting.
+            if (Config.BootProtectBinfmt)
+            {
+                LockBinfmtStatusReadOnly();
+            }
+
             CreateWslSystemdUnits(Config);
 
             const char* Argv[] = {INIT_PATH, nullptr};
@@ -2353,6 +2381,16 @@ Return Value:
             LOG_ERROR("execvpe({}) failed {}", INIT_PATH, errno);
             _exit(1);
         }
+
+        //
+        // Fork a watcher process that monitors WSL init and tears down
+        // the PID namespace if it exits unexpectedly.
+        //
+
+        UtilCreateChildProcess(LX_INIT_WSL_INIT_WATCHER, [&]() {
+            execl(LX_INIT_PATH, LX_INIT_WSL_INIT_WATCHER, static_cast<char*>(nullptr));
+            LOG_ERROR("execl({}) failed {}", LX_INIT_WSL_INIT_WATCHER, errno);
+        });
 
         //
         // Keep track of the new pid for WSL init.
@@ -2395,6 +2433,16 @@ Return Value:
             FATAL_ERROR("signalfd failed {}", errno);
         }
 
+        // Handle the case where the child already exited before signalfd was set up.
+        int Status{};
+        auto WaitResult = waitpid(distroInitPid.value(), &Status, WNOHANG);
+        if (WaitResult > 0 || (WaitResult < 0 && errno == ECHILD))
+        {
+            LOG_ERROR("Init has exited. Terminating distribution");
+            InitTerminateInstanceInternal(Config);
+            return;
+        }
+
         PollDescriptors.resize(2);
         PollDescriptors[1].fd = SignalFd.get();
         PollDescriptors[1].events = POLLIN;
@@ -2414,7 +2462,8 @@ Return Value:
         }
         else if (PollDescriptors[0].revents & POLLIN)
         {
-            auto [Header, Span] = channel.ReceiveMessageOrClosed<MESSAGE_HEADER>();
+            auto transaction = channel.ReceiveTransaction();
+            auto [Header, Span] = transaction.ReceiveOrClosed<MESSAGE_HEADER>();
             if (Header == nullptr)
             {
                 break;
@@ -2423,16 +2472,23 @@ Return Value:
             switch (Header->MessageType)
             {
             case LxInitMessageCreateSession:
-                if (InitCreateSessionLeader(Span, channel, -1, Config) < 0)
+            {
+                auto SendResponse = [&](LX_INIT_CREATE_SESSION_RESPONSE& response) { transaction.Send(response); };
+                if (InitCreateSessionLeader(Span, channel, SendResponse, -1, Config) < 0)
                 {
                     FATAL_ERROR("InitCreateSessionLeader failed");
                 }
-
-                break;
+            }
+            break;
 
             case LxInitMessageInitialize:
-                ConfigInitializeInstance(channel, Span, Config);
-                break;
+            {
+                auto SendResponse = [&](const gsl::span<gsl::byte>& span) {
+                    transaction.Send<LX_INIT_CONFIGURATION_INFORMATION_RESPONSE>(span);
+                };
+                ConfigInitializeInstance(SendResponse, Span, Config);
+            }
+            break;
 
             case LxInitMessageTimezoneInformation:
                 UpdateTimezone(Span, Config);
@@ -2448,15 +2504,18 @@ Return Value:
                 //
 
                 WaitForBootProcess(Config);
-                ConfigRemountDrvFs(Span, channel, Config);
+                ConfigRemountDrvFs(Span, transaction, Config);
                 break;
 
             case LxInitMessageTerminateInstance:
-                InitTerminateInstance(Span, channel, Config);
-                break;
+            {
+                auto SendResult = [&](bool result) { transaction.SendResultMessage<bool>(result); };
+                InitTerminateInstance(Span, SendResult, Config);
+            }
+            break;
 
             case LxInitCreateProcess:
-                ProcessCreateProcessMessage(channel, Span);
+                ProcessCreateProcessMessage(transaction, Span);
                 break;
 
             default:
@@ -2481,11 +2540,11 @@ Return Value:
 
             int Status{};
             auto Pid = waitpid(-1, &Status, WNOHANG);
-            if (Result == 0)
+            if (Pid == 0)
             {
                 continue;
             }
-            else if (Result > 0)
+            else if (Pid > 0)
             {
                 if (Pid == distroInitPid.value())
                 {
@@ -2500,18 +2559,7 @@ Return Value:
         }
     }
 
-    //
-    // If the distro init process was booted, use the shutdown command to terminate the instance.
-    //
-
-    if (Config.BootInit && !Config.BootStartWriteSocket)
-    {
-        UtilExecCommandLine("systemctl reboot", nullptr);
-    }
-
-    reboot(RB_POWER_OFF);
-    FATAL_ERROR("reboot(RB_POWER_OFF) failed {}", errno);
-
+    InitTerminateInstanceInternal(Config);
     return;
 }
 
@@ -2582,7 +2630,9 @@ Return Value:
         switch (Header->MessageType)
         {
         case LxInitMessageCreateSession:
-            if (InitCreateSessionLeader(Message, Channel, LxBusFd.get(), Config) < 0)
+        {
+            auto SendResponse = [&](LX_INIT_CREATE_SESSION_RESPONSE& response) { Channel.SendMessage(response); };
+            if (InitCreateSessionLeader(Message, Channel, SendResponse, LxBusFd.get(), Config) < 0)
             {
                 //
                 // If this distro has no children, exit on failure.
@@ -2596,24 +2646,32 @@ Return Value:
 
                 LOG_ERROR("InitCreateSessionLeader failed");
             }
-
-            break;
+        }
+        break;
 
         case LxInitMessageNetworkInformation:
             ConfigUpdateNetworkInformation(Message, Config);
             break;
 
         case LxInitMessageInitialize:
-            ConfigInitializeInstance(Channel, Message, Config);
-            break;
+        {
+            auto SendResponse = [&](const gsl::span<gsl::byte>& span) {
+                Channel.SendMessage<LX_INIT_CONFIGURATION_INFORMATION_RESPONSE>(span);
+            };
+            ConfigInitializeInstance(SendResponse, Message, Config);
+        }
+        break;
 
         case LxInitMessageTimezoneInformation:
             UpdateTimezone(Message, Config);
             break;
 
         case LxInitMessageTerminateInstance:
-            InitTerminateInstance(Message, Channel, Config);
-            break;
+        {
+            auto SendResult = [&](bool result) { Channel.SendResultMessage<bool>(result); };
+            InitTerminateInstance(Message, SendResult, Config);
+        }
+        break;
 
         default:
             FATAL_ERROR("Unexpected message {}", Header->MessageType);
@@ -2623,7 +2681,7 @@ Return Value:
     return;
 }
 
-void InitTerminateInstance(gsl::span<gsl::byte> Buffer, wsl::shared::SocketChannel& Channel, wsl::linux::WslDistributionConfig& Config)
+void InitTerminateInstance(gsl::span<gsl::byte> Buffer, const std::function<void(bool)>& SendResult, wsl::linux::WslDistributionConfig& Config)
 
 /*++
 
@@ -2635,7 +2693,7 @@ Arguments:
 
     Buffer - Supplies the message buffer.
 
-    Channel - Supplies a channel to send the response.
+    SendResult - Supplies a function to send the response.
 
     Config - Supplies the distribution config.
 
@@ -2654,10 +2712,56 @@ try
     }
 
     //
-    // Respond to the instance termination request.
+    // Attempt to stop the plan9 server, if it is not able to be stopped because of an
+    // in-use file, reply to the service that the instance could not be terminated.
     //
 
-    Channel.SendResultMessage<bool>(StopPlan9Server(Message->Force, Config));
+    if (!StopPlan9Server(Message->Force, Config))
+    {
+        SendResult(false);
+        return;
+    }
+
+    InitTerminateInstanceInternal(Config);
+}
+CATCH_LOG();
+
+void InitTerminateInstanceInternal(const wsl::linux::WslDistributionConfig& Config)
+
+/*++
+
+Routine Description:
+
+    This routine attempts to cleanly terminate the instance.
+
+Arguments:
+
+    Config - Supplies the distribution config.
+
+Return Value:
+
+    None.
+
+--*/
+try
+{
+    //
+    // If systemd is enabled, attempt to poweroff the instance via systemctl.
+    //
+
+    if (Config.BootInit && !Config.BootStartWriteSocket)
+    {
+        THROW_LAST_ERROR_IF(UtilSetSignalHandlers(g_SavedSignalActions, false) < 0);
+
+        if (UtilExecCommandLine("systemctl poweroff", nullptr) == 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(Config.BootInitTimeout));
+            LOG_ERROR("systemctl poweroff did not terminate the instance in {} ms, calling reboot(RB_POWER_OFF)", Config.BootInitTimeout);
+        }
+    }
+
+    reboot(RB_POWER_OFF);
+    FATAL_ERROR("reboot(RB_POWER_OFF) failed {}", errno);
 }
 CATCH_LOG();
 
@@ -2685,7 +2789,7 @@ Routine Description:
 
 Arguments:
 
-    Config - Supplies the distribution configuraiton.
+    Config - Supplies the distribution configuration.
 
 Return Value:
 
@@ -2712,6 +2816,52 @@ try
         THROW_LAST_ERROR_IF(UtilMkdirPath(folder, 0755) < 0);
         THROW_LAST_ERROR_IF(symlink("/init", std::format("{}/{}", folder, LX_INIT_WSL_USER_GENERATOR).c_str()));
     }
+}
+CATCH_LOG();
+
+void LockBinfmtStatusReadOnly()
+
+/*++
+
+Routine Description:
+
+    Bind-mounts a read-only file over /proc/sys/fs/binfmt_misc/status so that
+    systemd-shutdown's disable_binfmt() can't wipe the kernel-global binfmt
+    registry when this distro terminates. Without this, terminating any
+    systemd-enabled distro would clear WSLInterop in every other running
+    distro and break Windows interop VM-wide.
+
+Arguments:
+
+    None.
+
+Return Value:
+
+    None. Failures are logged; this is a best-effort hardening step.
+
+--*/
+
+try
+{
+    constexpr auto* lockFile = "/run/wsl/binfmt-status-lock";
+    constexpr auto* statusFile = BINFMT_MISC_MOUNT_TARGET "/status";
+    constexpr std::string_view content{"enabled\n"};
+
+    THROW_LAST_ERROR_IF(UtilMkdirPath("/run/wsl", 0755) < 0);
+
+    const wil::unique_fd fd{TEMP_FAILURE_RETRY(open(lockFile, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644))};
+    THROW_LAST_ERROR_IF(!fd);
+    THROW_LAST_ERROR_IF(write(fd.get(), content.data(), content.size()) != static_cast<ssize_t>(content.size()));
+
+    THROW_LAST_ERROR_IF(mount(lockFile, statusFile, nullptr, MS_BIND, nullptr) < 0);
+
+    // If the remount fails, tear down the bind-mount so /status either reflects
+    // the real binfmt_misc control file or is correctly read-only. A writable
+    // shadow would silently swallow writes that callers expect to reach the
+    // kernel (e.g. "echo -1 > /status").
+    auto unmountOnFailure = wil::scope_exit([&]() { umount2(statusFile, MNT_DETACH); });
+    THROW_LAST_ERROR_IF(mount(nullptr, statusFile, nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY, nullptr) < 0);
+    unmountOnFailure.release();
 }
 CATCH_LOG();
 
@@ -2845,7 +2995,7 @@ Return Value:
     //
 
     //
-    // N.B. SIGTTOU along with most other signals are blocked, otherwise
+    // N.B. SIGTTOU along with most other signals are blocked. Otherwise,
     //      this could generate a signal with the default behavior of
     //      stopping the process (waiting for SIGCONT to continue).
     //
@@ -2928,7 +3078,6 @@ Return Value:
 
 {
     std::vector<gsl::byte> Buffer;
-    MESSAGE_HEADER* Header{};
     struct sigaction SignalAction;
 
     //
@@ -2960,7 +3109,8 @@ Return Value:
 
     for (;;)
     {
-        auto [Message, Span] = channel.ReceiveMessageOrClosed<LX_INIT_CREATE_PROCESS_UTILITY_VM>();
+        auto transaction = channel.ReceiveTransaction();
+        auto [Message, Span] = transaction.ReceiveOrClosed<LX_INIT_CREATE_PROCESS_UTILITY_VM>();
         if (Message == nullptr)
         {
             _exit(0);
@@ -2969,7 +3119,7 @@ Return Value:
         switch (Message->Header.MessageType)
         {
         case LxInitMessageCreateProcessUtilityVm:
-            if (InitCreateProcessUtilityVm(Span, *Message, channel, Config) < 0)
+            if (InitCreateProcessUtilityVm(Span, *Message, transaction, Config) < 0)
             {
                 FATAL_ERROR("InitCreateProcessUtilityVm failed");
             }
@@ -2977,7 +3127,7 @@ Return Value:
             break;
 
         default:
-            FATAL_ERROR("Unexpected message {}", Header->MessageType);
+            FATAL_ERROR("Unexpected message {}", Message->Header.MessageType);
         }
     }
 
@@ -3082,7 +3232,7 @@ bool StopPlan9Server(bool Force, wsl::linux::WslDistributionConfig& Config)
     LX_INIT_STOP_PLAN9_SERVER Message{};
     Message.Header.MessageType = LxInitMessageStopPlan9Server;
     Message.Header.MessageSize = sizeof(Message);
-    Message.Force = Message.Force;
+    Message.Force = Force;
 
     const auto& Response = Config.Plan9ControlChannel.Transaction(Message);
 
@@ -3218,7 +3368,7 @@ unsigned int StartGns(int Argc, char** Argv)
 
     if (channel.Socket() == -1)
     {
-        readNotification = [&]() -> std::optional<GnsEngine::Message> {
+        readNotification = [&](wsl::shared::Transaction&) -> std::optional<GnsEngine::Message> {
             std::string content{std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>()};
             if (content.empty())
             {
@@ -3232,7 +3382,7 @@ unsigned int StartGns(int Argc, char** Argv)
             return {{AdapterId.has_value() ? LxGnsMessageNotification : LxGnsMessageInterfaceConfiguration, content, AdapterId}};
         };
 
-        returnStatus = [&](int Result, const std::string& Error) {
+        returnStatus = [&](int Result, const std::string& Error, wsl::shared::Transaction&) {
             GNS_LOG_INFO("Returning LxGnsMessageResult (no output fd) [{} - {}]", Result, Error.c_str());
             // exitCode keeps the most recent error in the test path
             if (Result != 0)
@@ -3244,9 +3394,9 @@ unsigned int StartGns(int Argc, char** Argv)
     }
     else
     {
-        readNotification = [&]() -> std::optional<GnsEngine::Message> {
+        readNotification = [&](wsl::shared::Transaction& transaction) -> std::optional<GnsEngine::Message> {
             std::vector<gsl::byte> Buffer;
-            auto [Message, Span] = channel.ReceiveMessageOrClosed<MESSAGE_HEADER>();
+            auto [Message, Span] = transaction.ReceiveOrClosed<MESSAGE_HEADER>();
             if (Message == nullptr)
             {
                 return {};
@@ -3309,7 +3459,7 @@ unsigned int StartGns(int Argc, char** Argv)
             }
         };
 
-        returnStatus = [&](int Result, const std::string& Error) {
+        returnStatus = [&](int Result, const std::string& Error, wsl::shared::Transaction& transaction) {
             std::vector<gsl::byte> Buffer(sizeof(LX_GNS_RESULT) + Error.size() + 1);
 
             GNS_LOG_INFO("Returning LxGnsMessageResult [{} - {}]", Result, Error.c_str());
@@ -3321,13 +3471,13 @@ unsigned int StartGns(int Argc, char** Argv)
                 response.WriteString(Error);
             }
 
-            return channel.SendMessage<LX_GNS_RESULT>(response.Span());
+            return transaction.Send<LX_GNS_RESULT>(response.Span());
         };
     }
 
     RoutingTable routingTable(RT_TABLE_MAIN);
     NetworkManager manager(routingTable);
-    GnsEngine engine(readNotification, returnStatus, manager, DnsFd, DnsTunnelingIp);
+    GnsEngine engine(channel, readNotification, returnStatus, manager, DnsFd, DnsTunnelingIp);
 
     engine.run();
 
@@ -3343,7 +3493,7 @@ void WaitForBootProcess(wsl::linux::WslDistributionConfig& Config)
     }
 
     //
-    // Launch the boot process wait for for it to finish booting.
+    // Launch the boot process wait for it to finish booting.
     //
 
     MESSAGE_HEADER Message{};
@@ -3379,4 +3529,37 @@ void WaitForBootProcess(wsl::linux::WslDistributionConfig& Config)
             LOG_ERROR("{} failed to start within {}ms", INIT_PATH, Config.BootInitTimeout);
         }
     }
+}
+
+int WslInitWatcher(int Argc, char** Argv)
+{
+    // Ignore log initialization failure. Not critical.
+    InitializeLogging(false);
+
+    UtilSetThreadName(LX_INIT_WSL_INIT_WATCHER);
+
+    const pid_t wslInitPid = getppid();
+    const int pidfd = syscall(SYS_pidfd_open, wslInitPid, 0);
+    if (pidfd < 0)
+    {
+        LOG_ERROR("pidfd_open failed {}", errno);
+        _exit(1);
+    }
+
+    pollfd pfd{pidfd, POLLIN, 0};
+    int rc;
+    while ((rc = poll(&pfd, 1, -1)) < 0 && errno == EINTR)
+    {
+    }
+    if (rc <= 0 || (pfd.revents & POLLIN) == 0)
+    {
+        LOG_ERROR("poll failed {} {}", rc, errno);
+        _exit(1);
+    }
+
+    LOG_ERROR("wsl init has exited, shutting down the distro");
+
+    // Teardown the current PID namespace. Not shutting down the VM.
+    reboot(RB_POWER_OFF);
+    _exit(1);
 }

@@ -20,6 +20,7 @@ Abstract:
 #include <fstream>
 #include <gsl/gsl>
 #include <format>
+#include <source_location>
 
 #ifndef WIN32
 #include <string.h>
@@ -46,29 +47,10 @@ using MacAddress = std::array<std::uint8_t, 6>;
 inline unsigned int CopyToSpan(const std::string_view String, const gsl::span<gsl::byte> Span, size_t& Offset)
 {
     gsl::copy(as_bytes(gsl::make_span(String.data(), String.size())), Span.subspan(Offset));
+    Span[Offset + String.size()] = gsl::byte{0};
     const auto PreviousOffset = gsl::narrow_cast<unsigned int>(Offset);
     Offset += String.size() + 1;
     return PreviousOffset;
-}
-
-inline bool IsDriveRoot(const std::string_view Path)
-{
-    bool IsRoot = true;
-    if (Path.length() == 3)
-    {
-        IsRoot &= Path[2] == '\\';
-    }
-
-    if (Path.length() == 2 || Path.length() == 3)
-    {
-        IsRoot &= isalpha(Path[0]) && Path[1] == ':';
-    }
-    else
-    {
-        IsRoot = false;
-    }
-
-    return IsRoot;
 }
 
 template <class T>
@@ -159,6 +141,64 @@ inline const char* FromSpan(gsl::span<gsl::byte> Span, size_t Offset = 0)
     return String.data();
 }
 
+template <typename T>
+inline const char* FromMessageBuffer(const gsl::span<gsl::byte>& Span)
+{
+    return FromSpan(Span, offsetof(T, Buffer));
+}
+
+inline std::vector<const char*> StringPointersFromArray(const std::vector<std::string>& Strings, bool insertNull)
+{
+    std::vector<const char*> result(Strings.size());
+    std::transform(Strings.begin(), Strings.end(), result.begin(), [](const std::string& str) { return str.c_str(); });
+
+    if (insertNull)
+    {
+        result.push_back(nullptr);
+    }
+
+    return result;
+}
+
+inline std::vector<std::string> ArrayFromSpan(gsl::span<const gsl::byte> Span, size_t Offset = 0)
+{
+    THROW_INVALID_ARG_IF(Span.size() < Offset);
+
+    Span = Span.subspan(Offset);
+
+    std::vector<std::string> Result;
+
+    auto it = Span.begin();
+
+    auto readSize = [&]() {
+        THROW_INVALID_ARG_IF(Span.end() - it < sizeof(int32_t));
+
+        auto size = *reinterpret_cast<const int32_t*>(&*it);
+        it += sizeof(int32_t);
+
+        return size;
+    };
+
+    while (true)
+    {
+        auto size = readSize();
+        if (size == -1)
+        {
+            break;
+        }
+
+        THROW_INVALID_ARG_IF(size < 0);
+        THROW_INVALID_ARG_IF(size > Span.end() - it);
+
+        const char* begin = reinterpret_cast<const char*>(&*it);
+        Result.emplace_back(begin, size);
+
+        it += size;
+    }
+
+    return Result;
+}
+
 constexpr auto c_defaultHostName = "localhost";
 
 inline std::string CleanHostname(const std::string_view Hostname)
@@ -200,6 +240,11 @@ inline std::string CleanHostname(const std::string_view Hostname)
         }
     }
 
+    if (result.size() > 64)
+    {
+        result.resize(64);
+    }
+
     while (!result.empty() && (result.back() == '.' || result.back() == '-'))
     {
         result.pop_back();
@@ -208,10 +253,6 @@ inline std::string CleanHostname(const std::string_view Hostname)
     if (result.empty())
     {
         result = c_defaultHostName;
-    }
-    else if (result.size() > 64)
-    {
-        result.resize(64);
     }
 
     return result;
@@ -713,7 +754,7 @@ inline MacAddress ParseMacAddress(const std::basic_string<T>& Input, T Separator
 }
 
 template <typename TChar>
-inline std::basic_string<TChar> FormatMacAddress(const MacAddress& input, TChar seperator)
+inline std::basic_string<TChar> FormatMacAddress(const MacAddress& input, TChar separator)
 {
     std::basic_string<TChar> output(17, '\0');
 
@@ -724,15 +765,15 @@ inline std::basic_string<TChar> FormatMacAddress(const MacAddress& input, TChar 
             output.size() + 1,
             MAC_ADDRESS_FORMAT_STRING,
             input[0],
-            seperator,
+            separator,
             input[1],
-            seperator,
+            separator,
             input[2],
-            seperator,
+            separator,
             input[3],
-            seperator,
+            separator,
             input[4],
-            seperator,
+            separator,
             input[5]);
     }
     else if constexpr (std::is_same_v<TChar, wchar_t>)
@@ -742,15 +783,15 @@ inline std::basic_string<TChar> FormatMacAddress(const MacAddress& input, TChar 
             output.size() + 1,
             STRING_TO_WIDE_STRING(MAC_ADDRESS_FORMAT_STRING),
             input[0],
-            seperator,
+            separator,
             input[1],
-            seperator,
+            separator,
             input[2],
-            seperator,
+            separator,
             input[3],
-            seperator,
+            separator,
             input[4],
-            seperator,
+            separator,
             input[5]);
     }
     else
@@ -783,6 +824,30 @@ struct CaseInsensitiveCompare
         return _wcsicmp(left.c_str(), right.c_str()) < 0;
     }
 };
+
+inline std::wstring FormatBytes(uint64_t bytes)
+{
+    constexpr double c_kB = 1000.0;
+    constexpr double c_MB = 1000.0 * 1000.0;
+    constexpr double c_GB = 1000.0 * 1000.0 * 1000.0;
+
+    if (bytes >= static_cast<uint64_t>(c_GB))
+    {
+        return std::format(L"{:.2f} GB", bytes / c_GB);
+    }
+    else if (bytes >= static_cast<uint64_t>(c_MB))
+    {
+        return std::format(L"{:.2f} MB", bytes / c_MB);
+    }
+    else if (bytes >= static_cast<uint64_t>(c_kB))
+    {
+        return std::format(L"{:.2f} KB", bytes / c_kB);
+    }
+    else
+    {
+        return std::format(L"{} B", bytes);
+    }
+}
 
 } // namespace wsl::shared::string
 
@@ -831,6 +896,38 @@ struct std::formatter<wchar_t[N], char>
     auto format(const wchar_t str[N], TCtx& ctx) const
     {
         return std::format_to(ctx.out(), "{}", wsl::shared::string::WideToMultiByte(str));
+    }
+};
+
+template <>
+struct std::formatter<std::source_location, char>
+{
+    template <typename TCtx>
+    static constexpr auto parse(TCtx& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template <typename TCtx>
+    auto format(const std::source_location& location, TCtx& ctx) const
+    {
+        return std::format_to(ctx.out(), "{}[{}:{}]", location.function_name(), location.file_name(), location.line());
+    }
+};
+
+template <>
+struct std::formatter<std::source_location, wchar_t>
+{
+    template <typename TCtx>
+    static constexpr auto parse(TCtx& ctx)
+    {
+        return ctx.begin();
+    }
+
+    template <typename TCtx>
+    auto format(const std::source_location& location, TCtx& ctx) const
+    {
+        return std::format_to(ctx.out(), L"{}[{}:{}]", location.function_name(), location.file_name(), location.line());
     }
 };
 

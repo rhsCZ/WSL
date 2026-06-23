@@ -117,11 +117,11 @@ bool wsl::core::networking::IsFlowSteeringSupportedByHns() noexcept
                 allocatePortRange.load(c_computeNetworkModuleName, "HcnReserveGuestNetworkServicePortRange"));
 
             static LxssDynamicFunction<decltype(HcnReserveGuestNetworkServicePort)> allocatePort{DynamicFunctionErrorLogs::None};
-            RETURN_IF_FAILED_EXPECTED(allocatePortRange.load(c_computeNetworkModuleName, "HcnReserveGuestNetworkServicePort"));
+            RETURN_IF_FAILED_EXPECTED(allocatePort.load(c_computeNetworkModuleName, "HcnReserveGuestNetworkServicePort"));
 
             static LxssDynamicFunction<decltype(HcnReleaseGuestNetworkServicePortReservationHandle)> releasePort{DynamicFunctionErrorLogs::None};
             RETURN_IF_FAILED_EXPECTED(
-                allocatePortRange.load(c_computeNetworkModuleName, "HcnReleaseGuestNetworkServicePortReservationHandle"));
+                releasePort.load(c_computeNetworkModuleName, "HcnReleaseGuestNetworkServicePortReservationHandle"));
 
             supported = true;
         }
@@ -247,4 +247,26 @@ wsl::core::networking::EphemeralHcnEndpoint wsl::core::networking::CreateEphemer
     THROW_IF_FAILED_MSG(result, "HcnCreateEndpoint(%ls) failed: %ls", settings.c_str(), error.get());
 
     return endpoint;
+}
+
+std::optional<ULONG> wsl::core::networking::GetMinimumConnectedInterfaceMtu() noexcept
+{
+    std::optional<ULONG> minMtu{};
+    try
+    {
+        unique_interface_table interfaceTable{};
+        THROW_IF_WIN32_ERROR(::GetIpInterfaceTable(AF_UNSPEC, &interfaceTable));
+
+        for (ULONG index = 0; index < interfaceTable.get()->NumEntries; index++)
+        {
+            const auto& ipInterface = interfaceTable.get()->Table[index];
+            if (ipInterface.Connected)
+            {
+                minMtu = std::min(minMtu.value_or(ipInterface.NlMtu), ipInterface.NlMtu);
+            }
+        }
+    }
+    CATCH_LOG()
+
+    return minMtu;
 }

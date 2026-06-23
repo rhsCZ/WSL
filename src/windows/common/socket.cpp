@@ -17,29 +17,54 @@ Abstract:
 #include "socket.hpp"
 #pragma hdrstop
 
-void wsl::windows::common::socket::Accept(_In_ SOCKET ListenSocket, _In_ SOCKET Socket, _In_ int Timeout, _In_opt_ HANDLE ExitHandle)
+void wsl::windows::common::socket::SetAcceptContext(_In_ SOCKET AcceptedSocket, _In_ SOCKET ListenSocket, _In_ const std::source_location& Location)
 {
-    CHAR AcceptBuffer[2 * sizeof(SOCKADDR_STORAGE)]{};
-    DWORD BytesReturned;
-    OVERLAPPED Overlapped{};
-    const wil::unique_event OverlappedEvent(wil::EventOptions::ManualReset);
-    Overlapped.hEvent = OverlappedEvent.get();
-    const BOOL Success =
-        AcceptEx(ListenSocket, Socket, AcceptBuffer, 0, sizeof(SOCKADDR_STORAGE), sizeof(SOCKADDR_STORAGE), &BytesReturned, &Overlapped);
-
-    if (!Success)
-    {
-        GetResult(ListenSocket, Overlapped, Timeout, ExitHandle);
-    }
-
     // Set the accept context to mark the socket as connected.
-    THROW_LAST_ERROR_IF(
-        setsockopt(Socket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, reinterpret_cast<char*>(&ListenSocket), sizeof(ListenSocket)) == SOCKET_ERROR);
-
-    return;
+    THROW_LAST_ERROR_IF_MSG(
+        setsockopt(AcceptedSocket, SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, reinterpret_cast<const char*>(&ListenSocket), sizeof(ListenSocket)) == SOCKET_ERROR,
+        "From: %hs",
+        std::format("{}", Location).c_str());
 }
 
-std::pair<DWORD, DWORD> wsl::windows::common::socket::GetResult(_In_ SOCKET Socket, _In_ OVERLAPPED& Overlapped, _In_ DWORD Timeout, _In_ HANDLE ExitHandle)
+std::optional<wil::unique_socket> wsl::windows::common::socket::CancellableAccept(
+    _In_ SOCKET ListenSocket, _In_ DWORD Timeout, _In_opt_ HANDLE ExitHandle, _In_ const std::source_location& Location)
+{
+    io::MultiHandleWait io;
+
+    std::optional<wil::unique_socket> accepted;
+
+    io.AddHandle(
+        std::make_unique<io::AcceptHandle>(
+            ListenSocket, true, [&accepted](wil::unique_socket&& socket) { accepted = std::move(socket); }),
+        io::MultiHandleWait::CancelOnCompleted);
+
+    if (ExitHandle != nullptr)
+    {
+        io.AddHandle(std::make_unique<io::EventHandle>(ExitHandle), io::MultiHandleWait::CancelOnCompleted);
+    }
+
+    std::optional<std::chrono::milliseconds> timeout;
+    if (Timeout != INFINITE)
+    {
+        timeout = std::chrono::milliseconds(Timeout);
+    }
+
+    try
+    {
+
+        io.Run(timeout);
+    }
+    catch (...)
+    {
+        auto hr = wil::ResultFromCaughtException();
+        THROW_HR_MSG(hr, "Failed to accept socket. From: %hs", std::format("{}", Location).c_str());
+    }
+
+    return accepted;
+}
+
+std::pair<DWORD, DWORD> wsl::windows::common::socket::GetResult(
+    _In_ SOCKET Socket, _In_ OVERLAPPED& Overlapped, _In_ DWORD Timeout, _In_ HANDLE ExitHandle, _In_ const std::source_location& Location)
 {
     const int error = WSAGetLastError();
     THROW_HR_IF(HRESULT_FROM_WIN32(error), error != WSA_IO_PENDING);
@@ -64,7 +89,7 @@ std::pair<DWORD, DWORD> wsl::windows::common::socket::GetResult(_In_ SOCKET Sock
         return {0, 0};
     }
 
-    THROW_HR_IF(HCS_E_CONNECTION_TIMEOUT, (waitStatus != WAIT_OBJECT_0));
+    THROW_HR_IF_MSG(HCS_E_CONNECTION_TIMEOUT, (waitStatus != WAIT_OBJECT_0), "From: %hs", std::format("{}", Location).c_str());
 
     cancelFunction.release();
     const bool result = WSAGetOverlappedResult(Socket, &Overlapped, &bytesProcessed, FALSE, &flagsReturned);
@@ -83,16 +108,17 @@ std::pair<DWORD, DWORD> wsl::windows::common::socket::GetResult(_In_ SOCKET Sock
     return {bytesProcessed, flagsReturned};
 }
 
-int wsl::windows::common::socket::Receive(_In_ SOCKET Socket, _In_ gsl::span<gsl::byte> Buffer, _In_opt_ HANDLE ExitHandle, _In_ DWORD Flags, _In_ DWORD Timeout)
+int wsl::windows::common::socket::Receive(
+    _In_ SOCKET Socket, _In_ gsl::span<gsl::byte> Buffer, _In_opt_ HANDLE ExitHandle, _In_ DWORD Flags, _In_ DWORD Timeout, _In_ const std::source_location& Location)
 {
-    const int BytesRead = ReceiveNoThrow(Socket, Buffer, ExitHandle, Flags, Timeout);
+    const int BytesRead = ReceiveNoThrow(Socket, Buffer, ExitHandle, Flags, Timeout, Location);
     THROW_LAST_ERROR_IF(BytesRead == SOCKET_ERROR);
 
     return BytesRead;
 }
 
 int wsl::windows::common::socket::ReceiveNoThrow(
-    _In_ SOCKET Socket, _In_ gsl::span<gsl::byte> Buffer, _In_opt_ HANDLE ExitHandle, _In_ DWORD Flags, _In_ DWORD Timeout)
+    _In_ SOCKET Socket, _In_ gsl::span<gsl::byte> Buffer, _In_opt_ HANDLE ExitHandle, _In_ DWORD Flags, _In_ DWORD Timeout, _In_ const std::source_location& Location)
 {
     OVERLAPPED Overlapped{};
     const wil::unique_event OverlappedEvent(wil::EventOptions::ManualReset);
@@ -100,10 +126,11 @@ int wsl::windows::common::socket::ReceiveNoThrow(
     Overlapped.hEvent = OverlappedEvent.get();
     DWORD BytesReturned{};
     if (WSARecv(Socket, &VectorBuffer, 1, &BytesReturned, &Flags, &Overlapped, nullptr) != 0)
+    {
         try
         {
             BytesReturned = SOCKET_ERROR;
-            auto [innerBytes, Flags] = GetResult(Socket, Overlapped, Timeout, ExitHandle);
+            auto [innerBytes, Flags] = GetResult(Socket, Overlapped, Timeout, ExitHandle, Location);
             BytesReturned = innerBytes;
         }
         catch (...)
@@ -112,37 +139,65 @@ int wsl::windows::common::socket::ReceiveNoThrow(
             // Receive will call GetLastError to look for the error code
             SetLastError(wil::ResultFromCaughtException());
         }
+    }
 
     return BytesReturned;
 }
 
-std::vector<gsl::byte> wsl::windows::common::socket::Receive(_In_ SOCKET Socket, _In_opt_ HANDLE ExitHandle, _In_ DWORD Timeout)
+std::vector<gsl::byte> wsl::windows::common::socket::Receive(
+    _In_ SOCKET Socket, _In_opt_ HANDLE ExitHandle, _In_ DWORD Timeout, _In_ const std::source_location& Location)
 {
-    Receive(Socket, {}, ExitHandle, MSG_PEEK);
+    Receive(Socket, {}, ExitHandle, MSG_PEEK, Timeout, Location);
 
     ULONG Size = 0;
     THROW_LAST_ERROR_IF(ioctlsocket(Socket, FIONREAD, &Size) == SOCKET_ERROR);
 
     std::vector<gsl::byte> Buffer(Size);
-    WI_VERIFY(Receive(Socket, gsl::make_span(Buffer), ExitHandle, Timeout) == static_cast<int>(Size));
+    WI_VERIFY(Receive(Socket, gsl::make_span(Buffer), ExitHandle, MSG_WAITALL, Timeout, Location) == static_cast<int>(Size));
 
     return Buffer;
 }
 
-int wsl::windows::common::socket::Send(_In_ SOCKET Socket, _In_ gsl::span<const gsl::byte> Buffer, _In_opt_ HANDLE ExitHandle)
+int wsl::windows::common::socket::Send(
+    _In_ SOCKET Socket, _In_ gsl::span<const gsl::byte> Buffer, _In_opt_ HANDLE ExitHandle, _In_ const std::source_location& Location)
 {
-    OVERLAPPED Overlapped{};
     const wil::unique_event OverlappedEvent(wil::EventOptions::ManualReset);
-    WSABUF VectorBuffer = {gsl::narrow_cast<ULONG>(Buffer.size()), const_cast<CHAR*>(reinterpret_cast<const CHAR*>(Buffer.data()))};
+    OVERLAPPED Overlapped{};
     Overlapped.hEvent = OverlappedEvent.get();
-    DWORD BytesWritten{};
-    if (WSASend(Socket, &VectorBuffer, 1, &BytesWritten, 0, &Overlapped, nullptr) != 0)
+
+    DWORD Offset = 0;
+    while (Offset < Buffer.size())
     {
-        DWORD Flags;
-        std::tie(BytesWritten, Flags) = GetResult(Socket, Overlapped, INFINITE, ExitHandle);
+        OverlappedEvent.ResetEvent();
+
+        WSABUF VectorBuffer = {
+            gsl::narrow_cast<ULONG>(Buffer.size() - Offset), const_cast<CHAR*>(reinterpret_cast<const CHAR*>(Buffer.data() + Offset))};
+
+        DWORD BytesWritten{};
+        if (WSASend(Socket, &VectorBuffer, 1, &BytesWritten, 0, &Overlapped, nullptr) != 0)
+        {
+            // If WSASend returns non-zero, expect WSA_IO_PENDING.
+            if (auto error = WSAGetLastError(); error != WSA_IO_PENDING)
+            {
+                THROW_WIN32_MSG(error, "WSASend failed. From: %hs", std::format("{}", Location).c_str());
+            }
+
+            DWORD Flags;
+            std::tie(BytesWritten, Flags) = GetResult(Socket, Overlapped, INFINITE, ExitHandle, Location);
+            if (BytesWritten == 0)
+            {
+                THROW_WIN32_MSG(ERROR_CONNECTION_ABORTED, "Socket closed during WSASend(). From: %hs", std::format("{}", Location).c_str());
+            }
+        }
+
+        Offset += BytesWritten;
+        if (Offset < Buffer.size())
+        {
+            WSL_LOG("PartialSocketWrite", TraceLoggingValue(Buffer.size(), "MessageSize"), TraceLoggingValue(Offset, "Offset"));
+        }
     }
 
-    WI_ASSERT(BytesWritten == gsl::narrow_cast<DWORD>(Buffer.size()));
+    WI_ASSERT(Offset == gsl::narrow_cast<DWORD>(Buffer.size()));
 
-    return BytesWritten;
+    return Offset;
 }

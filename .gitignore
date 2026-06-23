@@ -6,10 +6,10 @@ tmp
 /.vs/
 /.vscode/
 *.sln
+*.slnx
 *.user
 *.csproj
 *.vcxproj
-*.targets
 *.filters
 *.pdb
 *.lib
@@ -41,9 +41,8 @@ linux/init
 initrd/init
 bin/
 *.nupkg
-build/
 generated/
-Microsoft.WSL.PluginApi.nuspec
+*.nuspec
 test/linux/unit_tests/wsl_unit_tests
 *.dir/
 UserConfig.cmake
@@ -63,5 +62,14 @@ msixinstaller/x64
 package/x64
 /appx-logs.txt
 tools/clang-format.exe
+tools/hooks/pre-commit
+!/tools/hooks/pre-commit.in
 /linux-crashes
 doc/site/
+directory.build.targets
+test-storage/
+*.vhdx
+*.tar
+*.etl
+*.lscache
+__pycache__

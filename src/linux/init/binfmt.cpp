@@ -174,7 +174,8 @@ try
     // Send the create process message to the interop server.
     //
 
-    channel.SendMessage<LX_INIT_CREATE_NT_PROCESS_UTILITY_VM>(Span);
+    auto transaction = channel.StartTransaction();
+    transaction.Send<LX_INIT_CREATE_NT_PROCESS_UTILITY_VM>(Span);
 
     //
     // Accept connections from the interop server.
@@ -785,7 +786,7 @@ Arguments:
 
     MessageType - Supplies the message type.
 
-    Argc - Supplies the command line agrument count.
+    Argc - Supplies the command line argument count.
 
     Argv - Supplies the command line arguments.
 

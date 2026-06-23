@@ -12,6 +12,8 @@
 #include <netinet/ip.h>
 #include <sys/syscall.h>
 #include <linux/unistd.h>
+#include <linux/sock_diag.h>
+#include <linux/inet_diag.h>
 #include <lxwil.h>
 #include <linux/if_tun.h>
 
@@ -21,12 +23,214 @@
 #include "SecCompDispatcher.h"
 #include "seccomp_defs.h"
 #include "CommandLine.h"
+#include "NetlinkChannel.h"
+#include "NetlinkTransactionError.h"
 
 #define TCP_LISTEN 10
 
 namespace {
 
-void ListenThread(sockaddr_vm hvSocketAddress, int listenSocket)
+std::vector<sockaddr_storage> QueryListeningSockets(NetlinkChannel& channel)
+{
+    std::vector<sockaddr_storage> sockets{};
+    try
+    {
+        inet_diag_req_v2 message{};
+        message.sdiag_protocol = IPPROTO_TCP;
+        message.idiag_states = (1 << TCP_LISTEN);
+
+        auto onMessage = [&](const NetlinkResponse& response) {
+            for (const auto& e : response.Messages<inet_diag_msg>(SOCK_DIAG_BY_FAMILY))
+            {
+                const auto* payload = e.Payload();
+                sockaddr_storage sock{};
+
+                if (payload->idiag_family == AF_INET)
+                {
+                    auto* ipv4 = reinterpret_cast<sockaddr_in*>(&sock);
+                    ipv4->sin_family = AF_INET;
+                    ipv4->sin_addr.s_addr = payload->id.idiag_src[0];
+                    ipv4->sin_port = payload->id.idiag_sport;
+                }
+                else if (payload->idiag_family == AF_INET6)
+                {
+                    auto* ipv6 = reinterpret_cast<sockaddr_in6*>(&sock);
+                    ipv6->sin6_family = AF_INET6;
+                    static_assert(sizeof(ipv6->sin6_addr.s6_addr32) == sizeof(payload->id.idiag_src));
+                    memcpy(ipv6->sin6_addr.s6_addr32, payload->id.idiag_src, sizeof(ipv6->sin6_addr.s6_addr32));
+                    ipv6->sin6_port = payload->id.idiag_sport;
+                }
+
+                sockets.emplace_back(sock);
+            }
+        };
+
+        // Query IPv4 listening sockets.
+        {
+            message.sdiag_family = AF_INET;
+            auto transaction = channel.CreateTransaction(message, SOCK_DIAG_BY_FAMILY, NLM_F_DUMP);
+            transaction.Execute(onMessage);
+        }
+
+        // Query IPv6 listening sockets.
+        {
+            message.sdiag_family = AF_INET6;
+            auto transaction = channel.CreateTransaction(message, SOCK_DIAG_BY_FAMILY, NLM_F_DUMP);
+            transaction.Execute(onMessage);
+        }
+    }
+    catch (const NetlinkTransactionError& e)
+    {
+        // Log but don't fail - network state might be temporarily unavailable
+        LOG_ERROR("Failed to query listening sockets via sock_diag: {}", e.what());
+    }
+
+    return sockets;
+}
+
+int SendRelayListenerSocket(wsl::shared::SocketChannel& channel, int hvSocketPort)
+try
+{
+    LX_GNS_SET_PORT_LISTENER message{};
+    message.Header.MessageType = LxGnsMessageSetPortListener;
+    message.Header.MessageSize = sizeof(message);
+    message.HvSocketPort = hvSocketPort;
+
+    channel.SendMessage(message);
+
+    return 0;
+}
+CATCH_RETURN_ERRNO();
+
+LX_GNS_PORT_LISTENER_RELAY SockToRelayMessage(const sockaddr_storage& sock)
+{
+    LX_GNS_PORT_LISTENER_RELAY message{};
+    message.Header.MessageSize = sizeof(message);
+    message.Family = sock.ss_family;
+    if (sock.ss_family == AF_INET)
+    {
+        auto ipv4 = reinterpret_cast<const sockaddr_in*>(&sock);
+        message.Address[0] = ipv4->sin_addr.s_addr;
+        message.Port = ntohs(ipv4->sin_port);
+    }
+    else if (sock.ss_family == AF_INET6)
+    {
+        auto ipv6 = reinterpret_cast<const sockaddr_in6*>(&sock);
+        message.Port = ntohs(ipv6->sin6_port);
+        memcpy(message.Address, ipv6->sin6_addr.__in6_union.__s6_addr, sizeof(message.Address));
+    }
+    return message;
+}
+
+int StartHostListener(wsl::shared::SocketChannel& channel, const sockaddr_storage& sock)
+try
+{
+    auto message = SockToRelayMessage(sock);
+    message.Header.MessageType = LxGnsMessagePortListenerRelayStart;
+    auto transaction = channel.StartTransaction();
+    transaction.Send(message);
+
+    return 0;
+}
+CATCH_RETURN_ERRNO();
+
+int StopHostListener(wsl::shared::SocketChannel& channel, const sockaddr_storage& sock)
+try
+{
+    auto message = SockToRelayMessage(sock);
+    message.Header.MessageType = LxGnsMessagePortListenerRelayStop;
+    auto transaction = channel.StartTransaction();
+    transaction.Send(message);
+
+    return 0;
+}
+CATCH_RETURN_ERRNO();
+
+bool IsSameSockAddr(const sockaddr_storage& left, const sockaddr_storage& right)
+{
+    if (left.ss_family != right.ss_family)
+    {
+        return false;
+    }
+
+    if (left.ss_family == AF_INET)
+    {
+        auto leftIpv4 = reinterpret_cast<const sockaddr_in*>(&left);
+        auto rightIpv4 = reinterpret_cast<const sockaddr_in*>(&right);
+        return (leftIpv4->sin_addr.s_addr == rightIpv4->sin_addr.s_addr && leftIpv4->sin_port == rightIpv4->sin_port);
+    }
+    else if (left.ss_family == AF_INET6)
+    {
+        auto leftIpv6 = reinterpret_cast<const sockaddr_in6*>(&left);
+        auto rightIpv6 = reinterpret_cast<const sockaddr_in6*>(&right);
+        return (leftIpv6->sin6_port == rightIpv6->sin6_port && memcmp(&leftIpv6->sin6_addr, &rightIpv6->sin6_addr, sizeof(in6_addr)) == 0);
+    }
+
+    FATAL_ERROR("Unrecognized socket family {}", left.ss_family);
+    return false;
+}
+
+// Monitor listening TCP sockets using sock_diag netlink interface.
+int MonitorListeningSockets(wsl::shared::SocketChannel& channel)
+{
+    NetlinkChannel netlinkChannel(SOCK_RAW, NETLINK_SOCK_DIAG);
+    std::vector<sockaddr_storage> relays{};
+    int result = 0;
+
+    for (;;)
+    {
+        auto sockets = QueryListeningSockets(netlinkChannel);
+
+        // Stop any relays that no longer match listening ports.
+        std::erase_if(relays, [&](const auto& entry) {
+            auto found =
+                std::find_if(sockets.begin(), sockets.end(), [&](const auto& socket) { return IsSameSockAddr(entry, socket); });
+
+            bool remove = (found == sockets.end());
+            if (remove)
+            {
+                if (StopHostListener(channel, entry) < 0)
+                {
+                    result = -1;
+                }
+            }
+
+            return remove;
+        });
+
+        // Create relays for any new ports.
+        std::for_each(sockets.begin(), sockets.end(), [&](const auto& socket) {
+            auto found =
+                std::find_if(relays.begin(), relays.end(), [&](const auto& entry) { return IsSameSockAddr(entry, socket); });
+
+            if (found == relays.end())
+            {
+                if (StartHostListener(channel, socket) < 0)
+                {
+                    result = -1;
+                }
+                else
+                {
+                    relays.push_back(socket);
+                }
+            }
+        });
+
+        // Ensure all start / stop operations were successful.
+        if (result < 0)
+        {
+            break;
+        }
+
+        // Sleep before scanning again.
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    return result;
+}
+} // namespace
+
+void RunLocalHostRelay(sockaddr_vm hvSocketAddress, int listenSocket)
 {
     pollfd pollDescriptors[] = {{listenSocket, POLLIN}};
     for (;;)
@@ -70,6 +274,7 @@ void ListenThread(sockaddr_vm hvSocketAddress, int listenSocket)
                 int socketAddressSize;
                 sockaddr_in sockaddrIn{};
                 sockaddr_in6 sockaddrIn6{};
+
                 if (message->Family == AF_INET)
                 {
                     sockaddrIn.sin_family = AF_INET;
@@ -145,256 +350,6 @@ void ListenThread(sockaddr_vm hvSocketAddress, int listenSocket)
     return;
 }
 
-std::vector<sockaddr_storage> ParseTcpFile(int family, FILE* file)
-{
-    char* line = nullptr;
-    auto freeLine = wil::scope_exit([&line]() { free(line); });
-
-    // Skip the first line which contains a header.
-    size_t lineLength = 0;
-    auto bytesRead = getline(&line, &lineLength, file);
-    THROW_LAST_ERROR_IF(bytesRead < 0);
-
-    // Each line contains information about TCP sockets on the system, the fields
-    // we are interested are for sockets that are or have been listening:
-    // 1: Socket address and port number
-    // 3: Socket status
-    std::vector<sockaddr_storage> sockets{};
-    while ((bytesRead = getline(&line, &lineLength, file)) != -1)
-    {
-        sockaddr_storage sock{};
-        int index = 0;
-        int status = 0;
-        for (char *sp, *field = strtok_r(line, " \n", &sp); field != nullptr; field = strtok_r(NULL, " \n", &sp))
-        {
-            if (index == 1)
-            {
-                int port;
-                const char* portString = strchr(field, ':');
-                if (portString == nullptr)
-                {
-                    break;
-                }
-                portString += 1;
-                port = static_cast<int>(strtol(portString, nullptr, 16));
-                if (port == 0)
-                {
-                    break;
-                }
-
-                if (family == AF_INET)
-                {
-                    sockaddr_in ipv4Sock{};
-                    ipv4Sock.sin_family = family;
-                    ipv4Sock.sin_addr.s_addr = strtol(field, nullptr, 16);
-                    ipv4Sock.sin_port = port;
-                    memcpy(&sock, &ipv4Sock, sizeof(ipv4Sock));
-                }
-                else if (family == AF_INET6)
-                {
-                    sockaddr_in6 ipv6Sock{};
-                    ipv6Sock.sin6_family = family;
-                    ipv6Sock.sin6_port = port;
-                    for (int part = 0; part < 4; ++part)
-                    {
-                        char next[5];
-                        next[4] = 0;
-                        memcpy(next, field + part * 4, 4);
-                        ipv6Sock.sin6_addr.__in6_union.__s6_addr32[part] = strtol(next, nullptr, 16);
-                    }
-                    memcpy(&sock, &ipv6Sock, sizeof(ipv6Sock));
-                }
-            }
-            else if (index == 3)
-            {
-                status = static_cast<int>(strtol(field, nullptr, 16));
-                break;
-            }
-
-            index += 1;
-        }
-
-        if ((status == TCP_LISTEN) && (sock.ss_family != 0))
-        {
-            sockets.emplace_back(sock);
-        }
-    }
-
-    return sockets;
-}
-
-int SendRelayListenerSocket(wsl::shared::SocketChannel& channel, int hvSocketPort)
-try
-{
-    LX_GNS_SET_PORT_LISTENER message{};
-    message.Header.MessageType = LxGnsMessageSetPortListener;
-    message.Header.MessageSize = sizeof(message);
-    message.HvSocketPort = hvSocketPort;
-
-    channel.SendMessage(message);
-
-    return 0;
-}
-CATCH_RETURN_ERRNO();
-
-LX_GNS_PORT_LISTENER_RELAY SockToRelayMessage(const sockaddr_storage& sock)
-{
-    LX_GNS_PORT_LISTENER_RELAY message{};
-    message.Header.MessageSize = sizeof(message);
-    message.Family = sock.ss_family;
-    if (sock.ss_family == AF_INET)
-    {
-        auto ipv4 = reinterpret_cast<const sockaddr_in*>(&sock);
-        message.Address[0] = ipv4->sin_addr.s_addr;
-        message.Port = ipv4->sin_port;
-    }
-    else if (sock.ss_family == AF_INET6)
-    {
-        auto ipv6 = reinterpret_cast<const sockaddr_in6*>(&sock);
-        message.Port = ipv6->sin6_port;
-        memcpy(message.Address, ipv6->sin6_addr.__in6_union.__s6_addr, sizeof(message.Address));
-    }
-    return message;
-}
-
-int StartHostListener(wsl::shared::SocketChannel& channel, const sockaddr_storage& sock)
-try
-{
-    auto message = SockToRelayMessage(sock);
-    message.Header.MessageType = LxGnsMessagePortListenerRelayStart;
-    channel.SendMessage(message);
-
-    return 0;
-}
-CATCH_RETURN_ERRNO();
-
-int StopHostListener(wsl::shared::SocketChannel& channel, const sockaddr_storage& sock)
-try
-{
-    auto message = SockToRelayMessage(sock);
-    message.Header.MessageType = LxGnsMessagePortListenerRelayStop;
-    channel.SendMessage(message);
-
-    return 0;
-}
-CATCH_RETURN_ERRNO();
-
-bool IsSameSockAddr(const sockaddr_storage& left, const sockaddr_storage& right)
-{
-    if (left.ss_family != right.ss_family)
-    {
-        return false;
-    }
-
-    if (left.ss_family == AF_INET)
-    {
-        auto leftIpv4 = reinterpret_cast<const sockaddr_in*>(&left);
-        auto rightIpv4 = reinterpret_cast<const sockaddr_in*>(&right);
-        return (leftIpv4->sin_addr.s_addr == rightIpv4->sin_addr.s_addr && leftIpv4->sin_port == rightIpv4->sin_port);
-    }
-    else if (left.ss_family == AF_INET6)
-    {
-        auto leftIpv6 = reinterpret_cast<const sockaddr_in6*>(&left);
-        auto rightIpv6 = reinterpret_cast<const sockaddr_in6*>(&right);
-        if (leftIpv6->sin6_port != rightIpv6->sin6_port)
-        {
-            return false;
-        }
-        for (int part = 0; part < 4; ++part)
-        {
-            if (leftIpv6->sin6_addr.__in6_union.__s6_addr32[part] != rightIpv6->sin6_addr.__in6_union.__s6_addr32[part])
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-    else
-    {
-        FATAL_ERROR("Unrecognized socket family {}", left.ss_family);
-        return false;
-    }
-}
-
-// Start looking for ports bound to localhost or wildcard.
-int ScanProcNetTCP(wsl::shared::SocketChannel& channel)
-{
-    // Peridocally scan procfs for listening TCP sockets.
-    std::vector<sockaddr_storage> relays{};
-    int result = 0;
-    for (;;)
-    {
-        std::vector<sockaddr_storage> sockets;
-        wil::unique_file tcp4File{fopen("/proc/net/tcp", "r")};
-        if (tcp4File)
-        {
-            sockets = ParseTcpFile(AF_INET, tcp4File.get());
-        }
-
-        wil::unique_file tcp6File{fopen("/proc/net/tcp6", "r")};
-        if (tcp6File)
-        {
-            auto ipv6Sockets = ParseTcpFile(AF_INET6, tcp6File.get());
-            sockets.insert(sockets.end(), ipv6Sockets.begin(), ipv6Sockets.end());
-        }
-
-        if (!tcp4File && !tcp6File)
-        {
-            LOG_ERROR("Failed to open /proc/net/tcp and /proc/net/tcp6, closing port relay");
-            return 1;
-        }
-
-        // Stop any relays that no longer match listening ports.
-        std::erase_if(relays, [&](const auto& entry) {
-            auto found =
-                std::find_if(sockets.begin(), sockets.end(), [&](const auto& socket) { return IsSameSockAddr(entry, socket); });
-
-            bool remove = (found == sockets.end());
-            if (remove)
-            {
-                if (StopHostListener(channel, entry) < 0)
-                {
-                    result = -1;
-                }
-            }
-
-            return remove;
-        });
-
-        // Create relays for any new ports.
-        std::for_each(sockets.begin(), sockets.end(), [&](const auto& socket) {
-            auto found =
-                std::find_if(relays.begin(), relays.end(), [&](const auto& entry) { return IsSameSockAddr(entry, socket); });
-
-            if (found == relays.end())
-            {
-                if (StartHostListener(channel, socket) < 0)
-                {
-                    result = -1;
-                }
-                else
-                {
-                    relays.push_back(socket);
-                }
-            }
-        });
-
-        // Ensure all start / stop operations were successful.
-        if (result < 0)
-        {
-            break;
-        }
-
-        // Sleep before scanning again.
-        //
-        // TODO: Investigate using EBPF notifications instead of a sleep.
-        sleep(1);
-    }
-
-    return result;
-}
-} // namespace
-
 // Create a thread to monitor for connections to relay.
 int StartLocalhostRelay(wsl::shared::SocketChannel& channel, int GuestRelayFd, bool ScanForPorts)
 try
@@ -419,7 +374,7 @@ try
     std::thread([hvSocketAddress, listenSocket = std::move(listenSocket)]() {
         try
         {
-            ListenThread(hvSocketAddress, listenSocket.get());
+            RunLocalHostRelay(hvSocketAddress, listenSocket.get());
         }
         CATCH_LOG()
     }).detach();
@@ -432,7 +387,7 @@ try
 
     if (ScanForPorts)
     {
-        return ScanProcNetTCP(channel);
+        return MonitorListeningSockets(channel);
     }
 
     return 0;
@@ -453,7 +408,9 @@ int RunPortTracker(int Argc, char** Argv)
                             " fd]"
                             " [" INIT_NETLINK_FD_ARG
                             " fd]"
-                            " [" INIT_PORT_TRACKER_LOCALHOST_RELAY " fd]\n";
+                            " [" INIT_PORT_TRACKER_LOCALHOST_RELAY
+                            " fd]"
+                            " [" INIT_PORT_TRACKER_NETWORKING_MODE_ARG " mode]\n";
 
     // This is only supported on VM mode.
     if (!UtilIsUtilityVm())
@@ -468,12 +425,14 @@ int RunPortTracker(int Argc, char** Argv)
     int PortTrackerFd = -1;
     int NetlinkSocketFd = -1;
     int GuestRelayFd = -1;
+    int NetworkingMode = static_cast<int>(LxMiniInitNetworkingModeNone);
 
     ArgumentParser parser(Argc, Argv);
     parser.AddArgument(Integer{BpfFd}, INIT_BPF_FD_ARG);
     parser.AddArgument(Integer{PortTrackerFd}, INIT_PORT_TRACKER_FD_ARG);
     parser.AddArgument(Integer{NetlinkSocketFd}, INIT_NETLINK_FD_ARG);
     parser.AddArgument(Integer{GuestRelayFd}, INIT_PORT_TRACKER_LOCALHOST_RELAY);
+    parser.AddArgument(Integer{NetworkingMode}, INIT_PORT_TRACKER_NETWORKING_MODE_ARG);
 
     try
     {
@@ -482,6 +441,12 @@ int RunPortTracker(int Argc, char** Argv)
     catch (const wil::ExceptionWithUserMessage& e)
     {
         std::cerr << e.what() << "\n" << Usage;
+        return 1;
+    }
+
+    if (NetworkingMode < LxMiniInitNetworkingModeNone || NetworkingMode > LxMiniInitNetworkingModeConsomme)
+    {
+        std::cerr << "Invalid networking mode (" << NetworkingMode << ")\n";
         return 1;
     }
 
@@ -514,7 +479,7 @@ int RunPortTracker(int Argc, char** Argv)
 
     auto seccompDispatcher = std::make_shared<SecCompDispatcher>(BpfFd);
 
-    GnsPortTracker portTracker(hvSocketChannel, std::move(channel), seccompDispatcher);
+    GnsPortTracker portTracker(hvSocketChannel, std::move(channel), seccompDispatcher, static_cast<LX_MINI_INIT_NETWORKING_MODE>(NetworkingMode));
 
     seccompDispatcher->RegisterHandler(
         __NR_bind, [&portTracker](seccomp_notif* notification) { return portTracker.ProcessSecCompNotification(notification); });

@@ -12,7 +12,7 @@ Abstract:
 
 --*/
 
-#pragma warning(disable : 4200 4214)
+#pragma warning(disable : 4200 4214 4875)
 
 #ifdef __cplusplus
 #define _WINSOCKAPI_
@@ -52,6 +52,7 @@ Abstract:
 #include <msi.h>
 #include <AccCtrl.h>
 #include <AclAPI.h>
+#include <wuapi.h>
 #include "windowsdefs.h"
 
 // Annotations
@@ -134,12 +135,14 @@ Abstract:
 
 // Telemetry Header
 #include "WslTelemetry.h"
+#include "SlowOperationWatcher.h"
 
 // LxCore headers
 #include <lxcoreapi.h>
 #include <lxbusapi.h>
 
 // Utility/helper functions
+#include "COMImplClass.h"
 #include "conncheckshared.h"
 #include "helpers.hpp"
 #include "string.hpp"
@@ -160,7 +163,7 @@ Abstract:
 #include "LxssDynamicFunction.h"
 #include "relay.hpp"
 #include "svccomm.hpp"
-#include "svccommio.hpp"
+#include "ConsoleState.h"
 #include "disk.hpp"
 #include "WslSecurity.h"
 #include "ExecutionContext.h"

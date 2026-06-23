@@ -19,8 +19,8 @@ enum RelayMode
 {
     Invalid = -1,
     DebugConsole,
-    DebugConsoleRelay,
     PortRelay,
+    WSLCPortRelay,
     KdRelay
 };
 
@@ -32,4 +32,5 @@ LPCWSTR const pipe_option = L"--pipe";
 LPCWSTR const exit_event_option = L"--exit-event";
 LPCWSTR const port_option = L"--port";
 LPCWSTR const disable_telemetry_option = L"--disable-telemetry";
+LPCWSTR const connect_pipe_option = L"--connect-pipe";
 } // namespace wslrelay

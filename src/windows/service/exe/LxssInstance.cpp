@@ -346,6 +346,7 @@ bool LxssInstance::RequestStop(_In_ bool Force)
     // Send the message to the init daemon to check if the instance can be terminated.
     bool shutdown = true;
     if (m_InitMessagePort)
+    {
         try
         {
             auto lock = m_InitMessagePort->Lock();
@@ -358,7 +359,8 @@ bool LxssInstance::RequestStop(_In_ bool Force)
             m_InitMessagePort->Receive(&terminateResponse, sizeof(terminateResponse));
             shutdown = terminateResponse.Result;
         }
-    CATCH_LOG()
+        CATCH_LOG()
+    }
 
     return shutdown;
 }
@@ -442,7 +444,7 @@ void LxssInstance::_ConfigureFilesystem(_In_ ULONG Flags)
     // Part of this process will try to upgrade existing LxFs folders to
     // enable the per-directory case sensitivity flag. To allow easy detection
     // of already processed folders, and resumption in case the process is
-    // interrupted, directories are only marked case sensitive after their
+    // interrupted, directories are only marked case-sensitive after their
     // children are processed.
     //
     // Paths for LXSS instances look like so:
@@ -474,7 +476,7 @@ void LxssInstance::_ConfigureFilesystem(_In_ ULONG Flags)
     ensureDirectoryWithAttributes(LXSS_ROOTFS_DIRECTORY, LXSS_ROOTFS_PERMISSIONS);
 
     // If this is the legacy distribution, ensure that the additional LxFs
-    // directories exist and have the correct attributes. Otherwise ensure that
+    // directories exist and have the correct attributes. Otherwise, ensure that
     // the rootfs/mnt directory exists for DrvFs mounts.
     switch (m_configuration.Version)
     {
@@ -551,7 +553,9 @@ wil::unique_handle LxssInstance::_CreateLxProcess(
             m_oobeThread = std::thread([this, OobeMessagePort = std::move(OobeMessagePort), registration = std::move(registration)]() mutable {
                 try
                 {
-                    auto Message = OobeMessagePort->Receive();
+                    // N.B. The LX_INIT_OOBE_RESULT message is only sent once the OOBE process completes, which might be waiting on user input.
+                    // Do no set a timeout here otherwise the OOBE flow will fail if the OOBE process takes longer than expected.
+                    auto Message = OobeMessagePort->Receive(INFINITE);
                     auto* OobeResult = gslhelpers::try_get_struct<LX_INIT_OOBE_RESULT>(gsl::make_span(Message));
                     THROW_HR_IF(E_INVALIDARG, !OobeResult || (OobeResult->Header.MessageType != LxInitOobeResult));
 
@@ -780,9 +784,6 @@ try
     // Impersonate the service.
     auto runAsSelf = wil::run_as_self();
 
-    // Update the instance's DNS information.
-    m_dnsInfo.UpdateNetworkInformation();
-
     // Update the resolv.conf file if it has changed.
     _UpdateNetworkConfigurationFiles(false);
     return;
@@ -795,7 +796,7 @@ void LxssInstance::_UpdateNetworkConfigurationFiles(_In_ bool UpdateAlways)
     wsl::core::networking::DnsSettingsFlags flags = wsl::core::networking::DnsSettingsFlags::IncludeIpv6Servers;
     WI_SetFlagIf(flags, wsl::core::networking::DnsSettingsFlags::IncludeVpn, m_enableVpnDetection);
 
-    const auto dnsSettings = m_dnsInfo.GetDnsSettings(flags);
+    const auto dnsSettings = wsl::core::networking::HostDnsInfo::GetDnsSettings(flags);
     std::string fileContents = GenerateResolvConf(dnsSettings);
     std::lock_guard<std::mutex> lock(m_resolvConfLock);
     if (!UpdateAlways && (fileContents == m_lastResolvConfContents))

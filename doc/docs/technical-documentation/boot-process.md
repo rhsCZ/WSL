@@ -4,7 +4,7 @@ This page describes the steps in the WSL2 process, from the user invoking [wsl.e
 
 ## Overview 
 
-The below diagram shows the sequence of event to start bash within a WSL2 distribution. See [WSL architecture](index.md) for details about what each process does.
+The below diagram shows the sequence of events to start bash within a WSL2 distribution. See [WSL architecture](index.md) for details about what each process does.
 
 ```mermaid
 sequenceDiagram
@@ -43,7 +43,7 @@ sequenceDiagram
 
 ## CreateInstance()
 
-When [wslervice.exe](wslservice.exe.md) receives the CreateInstance() call via COM, it will:
+When [wslservice.exe](wslservice.exe.md) receives the CreateInstance() call via COM, it will:
 
 1) Identify which distribution the user wants to create. This is done by looking up the `DistributionRegistration` (see `src/windows/service/exe/DistributionRegistration.cpp`) in the Windows registry, matching either on the distribution ID, or using the default if none is provided.
 
@@ -64,7 +64,7 @@ See `src/windows/common/hcs_schema.h` for more details on the HCS JSON schema.
 
 Part of the JSON configuration includes:
 
-- The kernel: WSL will use its built-in kernel, usually installed `C:/Program Files/WSL/tools/kernel`, or a custom kernel if overridden via [.wslconfig](https://learn.microsoft.com/windows/wsl/wsl-config)
+- The kernel: WSL will use its built-in kernel, usually installed in `C:\Program Files\WSL\tools\kernel`, or a custom kernel if overridden via [.wslconfig](https://learn.microsoft.com/windows/wsl/wsl-config)
 - The initramfs: WSL uses its own initramfs (usually installed in `C:\Program Files\WSL\tools\initrd.img`). It's an image that only contains the [mini_init](mini_init.md) binary
 - The resources accessible to the virtual machine such as CPU, RAM, GPU, etc
 
@@ -76,25 +76,25 @@ When started, the virtual machine will boot into the provided kernel, and then e
 
 - Identifiers for the system VHD, swap VHD and kernel modules VHD if any
 - The machine's hostname
-- The configured memory reclaim mode and page reporting order(See [wsl2.pageReporting](https://learn.microsoft.com/windows/wsl/wsl-config))*
+- The configured memory reclaim mode and page reporting order
 
 [mini_init](mini_init.md) then creates the [gns process](gns.md), which is responsible for networking configuration and then receives a `LxMiniInitMessageInitialConfig` message, which contains: 
 
 - An entropy buffer, to seed the virtual machine's entropy
 - Information about the GPU drivers shares to mount, if any
-- Wether [wslg](https://github.com/microsoft/wslg) is enabled
+- Whether [wslg](https://github.com/microsoft/wslg) is enabled
 
 After applying all the configuration requested by [wslservice.exe](wslservice.exe.md), the virtual machine is ready to start Linux distributions.
 
 ## Starting a Linux distribution
 
-To start a new distribution, [wslservice.exe](wslservice.exe.md) sends a `LxMiniInitMessageLaunchInit` message to [mini_init](mini_init.md), which then mounts the distribution vhd and starts [init](init.md). See ([init](init.md) for more details on WSL2 distributions configuration)
+To start a new distribution, [wslservice.exe](wslservice.exe.md) sends a `LxMiniInitMessageLaunchInit` message to [mini_init](mini_init.md), which then mounts the distribution vhd and starts [init](init.md). See [init](init.md) for more details on WSL2 distributions configuration.
 
-Once running, [wslservice.exe](wslservice.exe.md) can then send a `LxInitMessageCreateSession` message to start a new [session leader](session-leader.md) inside that distribution, which can be used to launch linux processes
+Once running, [wslservice.exe](wslservice.exe.md) can then send a `LxInitMessageCreateSession` message to start a new [session leader](session-leader.md) inside that distribution, which can be used to launch Linux processes
 
-## Relaying the linux process's input and output to Windows
+## Relaying the Linux process's input and output to Windows
 
-Once the user's linux process has been created, [wslservice.exe](wslservice.exe.md) can return from `CreateLxProcess()` back to [wsl.exe](wsl.exe.md). In the case of WSL2, [wsl.exe](wsl.exe.md) receives the following HANDLES: 
+Once the user's Linux process has been created, [wslservice.exe](wslservice.exe.md) can return from `CreateLxProcess()` back to [wsl.exe](wsl.exe.md). In the case of WSL2, [wsl.exe](wsl.exe.md) receives the following HANDLES: 
 
 - STDIN
 - STDOUT
@@ -104,7 +104,7 @@ Once the user's linux process has been created, [wslservice.exe](wslservice.exe.
 
 The `STDIN`, `STDOUT` and `STDERR` handles are used to relay input and output from the Linux process to the Windows terminal. Depending on the type of handle (terminal, pipe, file, ...), [wsl.exe](wsl.exe.md) will apply different relaying logics (see `src/windows/common/relay.cpp`) to achieve the best compatibility between Windows & Linux. 
 
-The `Control channel` is used to notify the linux process of a change in the terminal (for instance when [wsl.exe's](wsl.exe.md) terminal window is resized) so these changes can be applied to the Linux process as well. 
+The `Control channel` is used to notify the Linux process of a change in the terminal (for instance when [wsl.exe's](wsl.exe.md) terminal window is resized) so these changes can be applied to the Linux process as well. 
 
 The `Interop channel` has two usages: 
 

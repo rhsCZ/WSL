@@ -14,6 +14,14 @@ wpr -start wsl.wprp -filemode
 wpr -stop logs.ETL
 ```
 
+The consolidated `wsl.wprp` file includes multiple profiles for different scenarios:
+- `WSL` - General WSL tracing (default)
+- `WSL-Storage` - Enhanced storage tracing
+- `WSL-Networking` - Comprehensive networking tracing
+- `WSL-HvSocket` - HvSocket-specific tracing
+
+To use a specific profile, append `!ProfileName` to the wprp file, e.g., `wpr -start wsl.wprp!WSL-Networking -filemode`
+
 Once the log file is saved, you can use [WPA](https://apps.microsoft.com/detail/9n58qrw40dfw?hl=en-US&gl=US) to view the logs.
 
 Notable ETL providers: 
@@ -24,7 +32,7 @@ Notable ETL providers:
     - `Error`: Unexpected errors
     - `CreateVmBegin`, `CreateVmEnd`: Virtual machine lifetime
     - `CreateNetworkBegin`, `CreateNetworkEnd`: Networking configuration
-    - `SentMessage`, `ReceivedMessaged`: Communication on the hvsocket channels with Linux.
+    - `SentMessage`, `ReceivedMessage`: Communication on the hvsocket channels with Linux.
     
 - `Microsoft.Windows.Subsystem.Lxss`: Other WSL executables (wsl.exe, wslg.exe, wslconfig.exe, wslrelay.exe, ...)
     Important events:
@@ -33,7 +41,7 @@ Notable ETL providers:
 - `Microsoft.Windows.Plan9.Server`: Logs from the Windows plan9 server (used when accessing /mnt/ shares and running Windows)
 
 
-On the Linux side, the easiest way to access logs is to look at `dmesg` or use the debug console, which can enabled by writing:
+On the Linux side, the easiest way to access logs is to look at `dmesg` or use the debug console, which can be enabled by writing:
 
 ```
 [wsl2]
@@ -57,7 +65,7 @@ Once started, just use `dir /path/to/wsl/source` in gdb to connect the source fi
 
 ## Root namespace debugging
 
-Some WSL process such as `gns` or `mini_init` aren't accessible from within WSL distributions. To attach a debugger to those, use the debug shell via:
+Some WSL processes such as `gns` or `mini_init` aren't accessible from within WSL distributions. To attach a debugger to those, use the debug shell via:
 
 ```
 wsl --debug-shell

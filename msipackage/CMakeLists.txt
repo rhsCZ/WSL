@@ -1,16 +1,34 @@
 set(BIN ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_BUILD_TYPE})
+
+# For pipeline builds, use PACKAGE_INPUT_DIR if specified (contains signed binaries)
+# For local builds, use bin directory
+if(DEFINED PACKAGE_INPUT_DIR)
+    message(STATUS "Using signed binaries from ${PACKAGE_INPUT_DIR} for MSI packaging")
+else()
+    set(PACKAGE_INPUT_DIR ${BIN})
+endif()
+
+# DCOM Access/Launch permission binary security descriptor.
+# SDDL: O:BAG:BAD:(A;;CCDCSW;;;AU)(A;;CCDCSW;;;PS)(A;;CCDCSW;;;SY)
+# Grants local launch/activate to Authenticated Users, Principal Self, and SYSTEM.
+set(DCOM_PERMISSION "01000480580000006800000000000000140000000200440003000000000014000B00000001010000000000050B000000000014000B00000001010000000000050A000000000014000B0000000101000000000005120000000102000000000005200000002002000001020000000000052000000020020000")
+
 set(OUTPUT_PACKAGE ${BIN}/wsl.msi)
 set(PACKAGE_WIX_IN ${CMAKE_CURRENT_LIST_DIR}/package.wix.in)
 set(PACKAGE_WIX ${BIN}/package.wix)
 set(CAB_CACHE ${BIN}/cab)
-set(BINARIES wsl.exe;wslg.exe;wslhost.exe;wslrelay.exe;wslservice.exe;wslserviceproxystub.dll;init;initrd.img;wslinstall.dll)
-
+set(WINDOWS_BINARIES wsl.exe;wslg.exe;wslhost.exe;wslrelay.exe;wslservice.exe;wslserviceproxystub.dll;wslinstall.dll;wslc.exe;wslcsession.exe)
 if (WSL_BUILD_WSL_SETTINGS)
-    list(APPEND BINARIES_DEPENDENCIES "wslsettings/wslsettings.dll;wslsettings/wslsettings.exe;libwsl.dll")
+    list(APPEND WINDOWS_BINARIES "wslsettings/wslsettings.dll;wslsettings/wslsettings.exe;libwsl.dll")
 endif()
 
 set(BINARIES_DEPENDENCIES)
-foreach(binary ${BINARIES})
+foreach(binary ${WINDOWS_BINARIES})
+    list(APPEND BINARIES_DEPENDENCIES "${PACKAGE_INPUT_DIR}/${binary}")
+endforeach()
+
+set(LINUX_BINARIES init;initrd.img)
+foreach(binary ${LINUX_BINARIES})
     list(APPEND BINARIES_DEPENDENCIES "${BIN}/${binary}")
 endforeach()
 
@@ -39,7 +57,7 @@ add_custom_command(
 
 add_custom_target(msipackage DEPENDS ${OUTPUT_PACKAGE})
 set_target_properties(msipackage PROPERTIES EXCLUDE_FROM_ALL FALSE SOURCES ${PACKAGE_WIX_IN})
-add_dependencies(msipackage wsl wslg wslservice wslhost wslrelay wslserviceproxystub init initramfs wslinstall msixgluepackage)
+add_dependencies(msipackage wsl wslg wslservice wslhost wslrelay wslserviceproxystub init initramfs wslinstall msixgluepackage wslc wslcsession)
 
 if (WSL_BUILD_WSL_SETTINGS)
     add_dependencies(msipackage wslsettings libwsl)
@@ -53,5 +71,5 @@ if (DEFINED WSL_POST_BUILD_COMMAND)
         POST_BUILD
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         USES_TERMINAL
-        COMMAND ${WSL_POST_BUILD_COMMAND} -Platform ${TARGET_PLATFORM} -BuildType ${CMAKE_BUILD_TYPE})
+        COMMAND ${WSL_POST_BUILD_COMMAND} -BuildType ${CMAKE_BUILD_TYPE})
 endif()

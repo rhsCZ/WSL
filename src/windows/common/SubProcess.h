@@ -29,7 +29,7 @@ public:
         std::wstring Stderr;
     };
 
-    SubProcess(LPCWSTR ApplicationName, LPCWSTR CommandLine, DWORD Flags = CREATE_UNICODE_ENVIRONMENT);
+    SubProcess(LPCWSTR ApplicationName, LPCWSTR CommandLine, DWORD Flags = CREATE_UNICODE_ENVIRONMENT, DWORD StartupFlags = STARTF_FORCEOFFFEEDBACK);
 
     void SetStdHandles(HANDLE Stdin, HANDLE Stdout, HANDLE Stderr);
     void SetPseudoConsole(HPCON Console);
@@ -37,10 +37,10 @@ public:
     void InheritHandle(HANDLE Handle);
     void SetEnvironment(LPVOID Environment);
     void SetWorkingDirectory(LPCWSTR Directory);
-    void SetDesktop(LPCWSTR Desktop);
     void SetToken(HANDLE Token);
     void SetShowWindow(WORD Show);
     void SetFlags(DWORD Flag);
+    void SetJobObject(HANDLE JobObject);
 
     wil::unique_handle Start();
     DWORD Run(DWORD Timeout = INFINITE);
@@ -59,11 +59,13 @@ private:
     LPCWSTR m_desktop = nullptr;
     HANDLE m_token = nullptr;
     DWORD m_flags = 0;
+    DWORD m_startupFlags = 0;
 
     HANDLE m_stdIn = nullptr;
     HANDLE m_stdOut = nullptr;
     HANDLE m_stdErr = nullptr;
     HPCON m_pseudoConsole = nullptr;
+    HANDLE m_jobObject = nullptr;
     std::optional<DWORD> m_desktopAppPolicy;
     std::optional<WORD> m_showWindow;
     std::vector<HANDLE> m_inheritHandles;

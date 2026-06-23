@@ -6,12 +6,25 @@
                 "FriendlyName": "Ubuntu",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://releases.ubuntu.com/noble/ubuntu-24.04.2-wsl-amd64.wsl",
-                    "Sha256": "5d1eea52103166f1c460dc012ed325c6eb31d2ce16ef6a00ffdfda8e99e12f43"
+                    "Url": "https://releases.ubuntu.com/26.04/ubuntu-26.04-wsl-amd64.wsl",
+                    "Sha256": "96c7f5fb28a7fe28245331f9bfbe4375f18dd29a4850116ad3c4f60f6700c55c"
                 },
                 "Arm64Url": {
-                    "Url": "https://cdimages.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-wsl-arm64.wsl",
-                    "Sha256": "75e6660229fabb38a6fdc1c94eec7d834a565fa58a64b7534e540da5319b2576"
+                    "Url": "https://cdimages.ubuntu.com/releases/26.04/release/ubuntu-26.04-wsl-arm64.wsl",
+                    "Sha256": "9fae7b65ac7be0ebb019987c922f1f1f1aaffb061834eb22e76a5e2a958dd3f6"
+                }
+            },
+            {
+                "Name": "Ubuntu-26.04",
+                "FriendlyName": "Ubuntu 26.04 LTS",
+                "Default": false,
+                "Amd64Url": {
+                    "Url": "https://releases.ubuntu.com/26.04/ubuntu-26.04-wsl-amd64.wsl",
+                    "Sha256": "96c7f5fb28a7fe28245331f9bfbe4375f18dd29a4850116ad3c4f60f6700c55c"
+                },
+                "Arm64Url": {
+                    "Url": "https://cdimages.ubuntu.com/releases/26.04/release/ubuntu-26.04-wsl-arm64.wsl",
+                    "Sha256": "9fae7b65ac7be0ebb019987c922f1f1f1aaffb061834eb22e76a5e2a958dd3f6"
                 }
             },
             {
@@ -19,12 +32,38 @@
                 "FriendlyName": "Ubuntu 24.04 LTS",
                 "Default": false,
                 "Amd64Url": {
-                    "Url": "https://releases.ubuntu.com/noble/ubuntu-24.04.2-wsl-amd64.wsl",
-                    "Sha256": "5d1eea52103166f1c460dc012ed325c6eb31d2ce16ef6a00ffdfda8e99e12f43"
+                    "Url": "https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-wsl-amd64.wsl",
+                    "Sha256": "9b2f7730dc68227dd04a9f3e5eab86ad85caf556b8606ad94f1f29ff5c4fd3f5"
                 },
                 "Arm64Url": {
-                    "Url": "https://cdimages.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-wsl-arm64.wsl",
-                    "Sha256": "75e6660229fabb38a6fdc1c94eec7d834a565fa58a64b7534e540da5319b2576"
+                    "Url": "https://cdimages.ubuntu.com/releases/24.04.4/release/ubuntu-24.04.4-wsl-arm64.wsl",
+                    "Sha256": "6b244d89f412a68f51e58f396fab65bed3b5896a25c045a99bef9c78a07df507"
+                }
+            },
+            {
+                "Name": "Ubuntu-22.04",
+                "FriendlyName": "Ubuntu 22.04 LTS",
+                "Default": false,
+                "Amd64Url": {
+                    "Url": "https://releases.ubuntu.com/jammy/ubuntu-22.04.5-wsl-amd64.wsl",
+                    "Sha256": "4499c4fe257f2fc83145b429ce211a0a43fd590e70d6261ede616210947d9f8f"
+                },
+                "Arm64Url": {
+                    "Url": "https://cdimage.ubuntu.com/ubuntu/releases/jammy/release/ubuntu-22.04.5-wsl-arm64.wsl",
+                    "Sha256": "3e2d77b92cf9dad1095eaebcad96feba2781007f5f52431cd4fe6fff63b201e5"
+                }
+            },
+            {
+                "Name": "Ubuntu-20.04",
+                "FriendlyName": "Ubuntu 20.04 LTS",
+                "Default": false,
+                "Amd64Url": {
+                    "Url": "https://releases.ubuntu.com/focal/ubuntu-20.04.6-wsl-amd64.wsl",
+                    "Sha256": "a9073f3726aab9661076506603706eadf284b80a791dec3adfde8e1989906fa4"
+                },
+                "Arm64Url": {
+                    "Url": "https://cdimage.ubuntu.com/ubuntu/releases/focal/release/ubuntu-20.04.6-wsl-arm64.wsl",
+                    "Sha256": "16174012f9a3f6fb10729e648fd8c7dfa205d039d76902e4c28de746f85bf3c8"
                 }
             }
         ],
@@ -34,45 +73,45 @@
                 "FriendlyName": "openSUSE Tumbleweed",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20250618.0/openSUSE-Tumbleweed-20250616.x86_64-19.23-Build19.23.wsl",
-                    "Sha256": "0x806cc94e57a2205d3ac1d5397d9a41c7d3b3337d958ca180f75d152fca756ebd"
+                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20260423.0/openSUSE-Tumbleweed-20260422.x86_64-2.97-Build2.97.wsl",
+                    "Sha256": "0xc0dcf707276626e7a6227404c6a1e351dfdb9d39f2538d2b8a78a2c2e41f5912"
                 },
                 "Arm64Url": {
-                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20250618.0/openSUSE-Tumbleweed-20250616.aarch64-19.57-Build19.57.wsl",
-                    "Sha256": "0x4d2b14287dd6bade7de1ff901079c2c438ce19d519c951bfdf98d2dfc049c65a"
+                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20260423.0/openSUSE-Tumbleweed-20260422.aarch64-3.82-Build3.82.wsl",
+                    "Sha256": "0x70d02e702b7788c494ad785bc3987ac1361f263af99d2c8180aac269cf0a9747"
                 }
             },
             {
-                "Name": "openSUSE-Leap-15.6",
-                "FriendlyName": "openSUSE Leap 15.6",
+                "Name": "openSUSE-Leap-16.0",
+                "FriendlyName": "openSUSE Leap 16.0",
                 "Default": false,
                 "Amd64Url": {
-                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20250320.0/openSUSE-Leap-15.6-15.6.x86_64-15.2-Build15.2.wsl",
-                    "Sha256": "0x63ea1828168026c86522743d551b2c88f0f4f94d813d2adc5881164d176b0ea1"
+                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20251001.0/openSUSE-Leap-16.0-16.0.x86_64-22.57-Build22.57.wsl",
+                    "Sha256": "0x0d1faa095153beee0a9b5089b0f9aa3d2aec95e2cdcffdeeff84dd54c48b8393"
                 },
                 "Arm64Url": {
-                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20250320.0/openSUSE-Leap-15.6-15.6.aarch64-15.2-Build15.2.wsl",
-                    "Sha256": "0x0a3c646f69bb83889c4264e41030076104a2f3d71ae6a1e14a1e0653dfd2e3d4"
+                    "Url": "https://github.com/openSUSE/WSL-instarball/releases/download/v20251001.0/openSUSE-Leap-16.0-16.0.aarch64-22.57-Build22.57.wsl",
+                    "Sha256": "0x91bcdc7e9f42d7a60a4464ad867d91243aaaecab7b3a057039f77a989daac51e"
                 }
             }
         ],
         "SUSE": [
             {
-                "Name": "SUSE-Linux-Enterprise-15-SP6",
-                "FriendlyName": "SUSE Linux Enterprise 15 SP6",
+                "Name": "SUSE-Linux-Enterprise-15-SP7",
+                "FriendlyName": "SUSE Linux Enterprise 15 SP7",
                 "Default": false,
                 "Amd64Url": {
-                    "Url": "https://github.com/SUSE/WSL-instarball/releases/download/v20250618.0/SUSE-Linux-Enterprise-15-SP6-15.6.x86_64-23.23-Build23.23.wsl",
-                    "Sha256": "0x8f1101972eab1e503993a183e34851920935988f2d5dd1574e336e470101e0e6"
+                    "Url": "https://github.com/SUSE/WSL-instarball/releases/download/v20260605.0/SUSE-Linux-Enterprise-15-SP7-15.7.x86_64-32.3-Build32.3.wsl",
+                    "Sha256": "0x2c756dd68cae863b47a513ec79af11dd93c6c06637329fceead01bb7682ec764"
                 }
             },
             {
-                "Name": "SUSE-Linux-Enterprise-15-SP7",
-                "FriendlyName": "SUSE Linux Enterprise 15 SP7",
+                "Name": "SUSE-Linux-Enterprise-16.0",
+                "FriendlyName": "SUSE Linux Enterprise 16.0",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://github.com/SUSE/WSL-instarball/releases/download/v20250618.0/SUSE-Linux-Enterprise-15-SP7-15.7.x86_64-23.26-Build23.26.wsl",
-                    "Sha256": "0x0c828685931adae35832d7098fee79a6586b9d77a8c250264fa270703bf3a3ce"
+                    "Url": "https://github.com/SUSE/WSL-instarball/releases/download/v20260515.0/SUSE-Linux-Enterprise-16.0-16.0.x86_64-1.74-Build1.74.wsl",
+                    "Sha256": "0xd98c6790a11ce149e37fe7ee276f8093f927a5882a674b1f1912a7f015311650"
                 }
             }
         ],
@@ -82,12 +121,12 @@
                 "FriendlyName": "Kali Linux Rolling",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://kali.download/wsl-images/kali-2025.2/kali-linux-2025.2-wsl-rootfs-amd64.wsl",
-                    "Sha256": "9a9d3dca4aec0c2d29320e7b2eee072ff37c5f3396759c25afeaed0bb700d778"
+                    "Url": "https://kali.download/wsl-images/kali-2026.1/kali-linux-2026.1-wsl-rootfs-amd64.wsl",
+                    "Sha256": "55c295400603a592d5ccf6a4046bb965f04d2509a62d1752cb2fe586c65deded"
                 },
                 "Arm64Url": {
-                    "Url": "https://kali.download/wsl-images/kali-2025.2/kali-linux-2025.2-wsl-rootfs-arm64.wsl",
-                    "Sha256": "f0c1241af735f869499d68135852392317ebbf6b4fb6681d7e9c312dbe498567"
+                    "Url": "https://kali.download/wsl-images/kali-2026.1/kali-linux-2026.1-wsl-rootfs-arm64.wsl",
+                    "Sha256": "6ecd31844e9c1f0f77c052480ac40aeca24036846428676fa9137b003ab1b8e5"
                 }
             }
         ],
@@ -97,12 +136,12 @@
                 "FriendlyName": "Debian GNU/Linux",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://salsa.debian.org/debian/WSL/-/jobs/7130915/artifacts/raw/Debian_WSL_AMD64_v1.20.0.0.wsl",
-                    "Sha256": "51a0c7af534929305238bd356a217b371562e6a0fcdfab65c7e49fb8252e2f23"
+                    "Url": "https://salsa.debian.org/debian/WSL/-/jobs/9606244/artifacts/raw/Debian_WSL_AMD64_v1.26.0.0.wsl",
+                    "Sha256": "5ec7dc68216e75d1d4d4761474e99d8461a98d316537110314b137122a879e0f"
                 },
                 "Arm64Url": {
-                    "Url": "https://salsa.debian.org/debian/WSL/-/jobs/7130915/artifacts/raw/Debian_WSL_ARM64_v1.20.0.0.wsl",
-                    "Sha256": "ceb883ce1c016f7bc01c2f58dfa3224684d49efb0d1b2a216ce889cac2738bc5"
+                    "Url": "https://salsa.debian.org/debian/WSL/-/jobs/9606244/artifacts/raw/Debian_WSL_ARM64_v1.26.0.0.wsl",
+                    "Sha256": "09120df4fadc36fb2a0f7298e197785e6f599f12aaf95d43cba07a8ac7fb316b"
                 }
             }
         ],
@@ -112,12 +151,12 @@
                 "FriendlyName": "AlmaLinux OS 8",
                 "Default": false,
                 "Amd64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v8.10.20250415.0/AlmaLinux-8.10_x64_20250415.0.wsl",
-                    "Sha256": "34c3bc6d3ac693968737c65db52b67f68b8c1a6f8b024450819841a967f59a3d"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v8.10.20260311.0/AlmaLinux-8.10_x64_20260311.0.wsl",
+                    "Sha256": "77a662e2947a1482087e3edf22595d62121ad8011385152f9209734adac87941"
                 },
                 "Arm64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v8.10.20250415.0/AlmaLinux-8.10_ARM64_20250415.0.wsl",
-                    "Sha256": "bd34f64b4822f6f115058f79cdbba85a1560360efbec14c3d699695023f8ca19"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v8.10.20260311.0/AlmaLinux-8.10_ARM64_20260311.0.wsl",
+                    "Sha256": "7fb2e5d25cbba9bfeef1f9e1420fa4e30b671264aa92a015adf8f2901cdfb97f"
                 }
             },
             {
@@ -125,12 +164,12 @@
                 "FriendlyName": "AlmaLinux OS 9",
                 "Default": false,
                 "Amd64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v9.6.20250522.0/AlmaLinux-9.6_x64_20250522.0.wsl",
-                    "Sha256": "e0f6acf1ce5aff80f2e60d3d8191c0a3857720149a7e5521b96e11777cdd2779"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v9.8.20260526.0/AlmaLinux-9.8_x64_20260526.0.wsl",
+                    "Sha256": "4a4377d451a4ede509e61ab4e4870f9654bc99beb7a0b40c8b54e71a6752cd8e"
                 },
                 "Arm64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v9.6.20250522.0/AlmaLinux-9.6_ARM64_20250522.0.wsl",
-                    "Sha256": "58d1cc623c4570307825036460e51a406bdcf53b4b5a4148cf644f5f68ce48dd"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v9.8.20260526.0/AlmaLinux-9.8_ARM64_20260526.0.wsl",
+                    "Sha256": "b94a298f207782d37c0e2c019e7f95f52a94f933ad702b8479340bcfde68c4b3"
                 }
             },
             {
@@ -138,12 +177,12 @@
                 "FriendlyName": "AlmaLinux OS Kitten 10",
                 "Default": false,
                 "Amd64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10-kitten.20250415.0/AlmaLinux-Kitten-10_x64_20250415.0.wsl",
-                    "Sha256": "8db3788b5728e58e32a4a96d9aa26974a48bf7936ed376da434c5c441a0fa7bd"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10-kitten.20260330.0/AlmaLinux-Kitten-10_x64_20260330.0.wsl",
+                    "Sha256": "ada0914f1331fddfa626eaffd2e21288cc35b1c9c7a07d466f488d36b9b90cca"
                 },
                 "Arm64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10-kitten.20250415.0/AlmaLinux-Kitten-10_ARM64_20250415.0.wsl",
-                    "Sha256": "f48a55e9fd4da1b84c2a9e960a9f3bc6e9fa65387ed9181826e1f052b2ce545e"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10-kitten.20260330.0/AlmaLinux-Kitten-10_ARM64_20260330.0.wsl",
+                    "Sha256": "597bd7717d796550f85a3e9307f75fdd73d6c18a71b58898dd43a0dbca3da0fc"
                 }
             },
             {
@@ -151,12 +190,12 @@
                 "FriendlyName": "AlmaLinux OS 10",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10.0.20250529.0/AlmaLinux-10.0_x64_20250529.0.wsl",
-                    "Sha256": "6775711048b86743588da7173ab45ca449b5c50a72fb87635313f059a9813d4b"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10.2.20260526.0/AlmaLinux-10.2_x64_20260526.0.wsl",
+                    "Sha256": "55e75d87bad292bdb14c8c57bc35aaa5bd253e4f565321dd196c3f25b692be48"
                 },
                 "Arm64Url": {
-                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10.0.20250529.0/AlmaLinux-10.0_ARM64_20250529.0.wsl",
-                    "Sha256": "bc424bd9f954d36e871d4d874d35bc25e3ea7bdfe48337c30b927ed73a79b2fa"
+                    "Url": "https://github.com/AlmaLinux/wsl-images/releases/download/v10.2.20260526.0/AlmaLinux-10.2_ARM64_20260526.0.wsl",
+                    "Sha256": "d3b3ecc7b58ee3cceaa656de04175e81df2e7969efb2e22aba95c9ff1f430949"
                 }
             }
         ],
@@ -166,23 +205,47 @@
                 "FriendlyName": "Arch Linux",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://geo.mirror.pkgbuild.com/wsl/2025.07.01.132764/archlinux-2025.07.01.132764.wsl",
-                    "Sha256": "c23cebe8e9fbcf467526216506d322cce7fd4932c70199309b984e86ab1160ec"
+                    "Url": "https://fastly.mirror.pkgbuild.com/wsl/2026.06.01.169366/archlinux-2026.06.01.169366.wsl",
+                    "Sha256": "065af35681d07fd4d7910beb53784f2cb6ab4c692bff806bca913b9695370fec"
                 }
             }
         ],
         "Fedora": [
             {
-                "Name": "FedoraLinux-42",
-                "FriendlyName": "Fedora Linux 42",
+                "Name": "FedoraLinux-44",
+                "FriendlyName": "Fedora Linux 44",
                 "Default": true,
                 "Amd64Url": {
-                    "Url": "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Container/x86_64/images/Fedora-WSL-Base-42-1.1.x86_64.tar.xz",
-                    "Sha256": "99fb3d05d78ca17c6815bb03cf528da8ef82ebc6260407f2b09461e0da8a1b8d"
+                    "Url": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-WSL-Base-44-1.7.x86_64.wsl",
+                    "Sha256": "2e5b153ba4b639952bf546be577fc19b832fe8944caa7de342b32f10da7d319a"
                 },
                 "Arm64Url": {
-                    "Url": "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Container/aarch64/images/Fedora-WSL-Base-42-1.1.aarch64.tar.xz",
-                    "Sha256": "a5a2ceb8ca56b7245b909d021b0fd620427db349f02b8ef3b82b741bcb5611cd"
+                    "Url": "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/aarch64/images/Fedora-WSL-Base-44-1.7.aarch64.wsl",
+                    "Sha256": "1a3220262dc918b07d08410278205fb35e92c28a53455382028eea1a980476ee"
+                }
+            },
+            {
+                "Name": "FedoraLinux-43",
+                "FriendlyName": "Fedora Linux 43",
+                "Default": false,
+                "Amd64Url": {
+                    "Url": "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Container/x86_64/images/Fedora-WSL-Base-43-1.6.x86_64.wsl",
+                    "Sha256": "220780af9cf225e9645313b4c7b0457a26a38a53285eb203b2ab6188d54d5b82"
+                },
+                "Arm64Url": {
+                    "Url": "https://download.fedoraproject.org/pub/fedora/linux/releases/43/Container/aarch64/images/Fedora-WSL-Base-43-1.6.aarch64.wsl",
+                    "Sha256": "7eef7a83260218d8c878b3c7bbdaf11772103145184d0c65df27557f4cd49548"
+                }
+            }
+        ],
+        "eLxr": [
+            {
+                "Name": "eLxr",
+                "FriendlyName": "eLxr 12.12.0.0 GNU/Linux",
+                "Default": true,
+                "Amd64Url": {
+                    "Url": "https://gitlab.com/api/v4/projects/68007430/packages/generic/wsl/12.12.0.0/eLxr_WSL_AMD64_12.12.0.0.wsl",
+                    "Sha256": "f94e0c44be51550478100ea150b80535f955bf87487d1b964f4636d97478c05d"
                 }
             }
         ]
@@ -220,46 +283,6 @@
             "PackageFamilyName": "KaliLinux.54290C8133FEE_ey8k8hqnwqnmg"
         },
         {
-            "Name": "Ubuntu-18.04",
-            "FriendlyName": "Ubuntu 18.04 LTS",
-            "StoreAppId": "9PNKSF5ZN4SW",
-            "Amd64": true,
-            "Arm64": true,
-            "Amd64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu1804-230608_x64.appx",
-            "Arm64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu1804-230608_ARM64.appx",
-            "PackageFamilyName": "CanonicalGroupLimited.Ubuntu18.04LTS_79rhkp1fndgsc"
-        },
-        {
-            "Name": "Ubuntu-20.04",
-            "FriendlyName": "Ubuntu 20.04 LTS",
-            "StoreAppId": "9MTTCL66CPXJ",
-            "Amd64": true,
-            "Arm64": true,
-            "Amd64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu2004-230608_x64.appx",
-            "Arm64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu2004-230608_ARM64.appx",
-            "PackageFamilyName": "CanonicalGroupLimited.Ubuntu20.04LTS_79rhkp1fndgsc"
-        },
-        {
-            "Name": "Ubuntu-22.04",
-            "FriendlyName": "Ubuntu 22.04 LTS",
-            "StoreAppId": "9PN20MSR04DW",
-            "Amd64": true,
-            "Arm64": true,
-            "Amd64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu2204LTS-230518_x64.appx",
-            "Arm64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu2204LTS-230518_ARM64.appx",
-            "PackageFamilyName": "CanonicalGroupLimited.Ubuntu22.04LTS_79rhkp1fndgsc"
-        },
-        {
-            "Name": "Ubuntu-24.04",
-            "FriendlyName": "Ubuntu 24.04 LTS",
-            "StoreAppId": "9NZ3KLHXDJP5",
-            "Amd64": true,
-            "Arm64": true,
-            "Amd64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu2404-240425.AppxBundle",
-            "Arm64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/Ubuntu2404-240425.AppxBundle",
-            "PackageFamilyName": "CanonicalGroupLimited.Ubuntu24.04LTS_79rhkp1fndgsc"
-        },
-        {
             "Name": "OracleLinux_7_9",
             "FriendlyName": "Oracle Linux 7.9",
             "StoreAppId": "9P7L0QWBSLTK",
@@ -290,16 +313,6 @@
             "PackageFamilyName": "3810OracleAmericaInc.OracleLinux9.5_dm28ctvqnhe9g"
         },
         {
-            "Name": "openSUSE-Leap-15.6",
-            "FriendlyName": "openSUSE Leap 15.6",
-            "StoreAppId": "9PDTJHBQRQPF",
-            "Amd64": true,
-            "Arm64": true,
-            "Amd64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/openSUSELeap15p6-250320_x64.Appx",
-            "Arm64PackageUrl": "https://publicwsldistros.blob.core.windows.net/wsldistrostorage/openSUSELeap15p6-250320_ARM64.Appx",
-            "PackageFamilyName": "46932SUSE.openSUSELeap15.6_022rs5jcyhyac"
-        },
-        {
             "Name": "SUSE-Linux-Enterprise-15-SP6",
             "FriendlyName": "SUSE Linux Enterprise 15 SP6",
             "StoreAppId": "9N738KZGNB91",
@@ -315,8 +328,8 @@
             "StoreAppId": "9MSSK2ZXXN11",
             "Amd64": true,
             "Arm64": true,
-            "Amd64PackageUrl": "https://github.com/openSUSE/WSL-instarball/releases/download/v20250618.0/openSUSE-Tumbleweed-20250616-WSL.x86_64-25167.9.806.0-Build9.806.appx",
-            "Arm64PackageUrl": "https://github.com/openSUSE/WSL-instarball/releases/download/v20250618.0/openSUSE-Tumbleweed-20250616-WSL.aarch64-25167.9.410.0-Build9.410.appx",
+            "Amd64PackageUrl": "https://github.com/openSUSE/WSL-instarball/releases/download/v20260423.0/openSUSE-Tumbleweed-20260422-WSL.x86_64-26112.10.203.0-Build10.203.appx",
+            "Arm64PackageUrl": "https://github.com/openSUSE/WSL-instarball/releases/download/v20260423.0/openSUSE-Tumbleweed-20260422-WSL.aarch64-26112.10.154.0-Build10.154.appx",
             "PackageFamilyName": "46932SUSE.openSUSETumbleweed_022rs5jcyhyac"
         }
     ]

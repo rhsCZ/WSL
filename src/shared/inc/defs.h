@@ -16,11 +16,34 @@ Abstract:
 
 #if defined(_MSC_VER)
 #define THROW_INVALID_ARG_IF(condition) THROW_HR_IF(E_INVALIDARG, condition)
+
+#define THROW_IF_FAILED_EXCEPT(result, accepted) \
+    do \
+    { \
+        auto _result = (result); \
+        if (FAILED(_result) && _result != (accepted)) \
+        { \
+            THROW_HR(_result); \
+        } \
+    } while (0)
+
 #elif defined(__GNUC__)
 #define THROW_INVALID_ARG_IF(condition) THROW_ERRNO_IF(EINVAL, condition)
 #define _stricmp strcasecmp
 #define _wcsicmp wcscasecmp
 #endif
+
+#define NON_COPYABLE(Type) \
+    Type(const Type&) = delete; \
+    Type& operator=(const Type&) = delete;
+
+#define NON_MOVABLE(Type) \
+    Type(Type&&) = delete; \
+    Type& operator=(Type&&) = delete;
+
+#define DEFAULT_MOVABLE(Type) \
+    Type(Type&&) = default; \
+    Type& operator=(Type&&) = default;
 
 namespace wsl::shared {
 

@@ -20,11 +20,12 @@ Abstract:
 #include <set>
 #include <string_view>
 #include <optional>
+#include <functional>
 #include "SocketChannel.h"
 #include "WslDistributionConfig.h"
 
-#define WSL_USE_VIRTIO_9P(_Config) (WI_IsFlagSet(UtilGetFeatureFlags((_Config)), LxInitFeatureVirtIo9p))
-#define WSL_USE_VIRTIO_FS(_Config) (WI_IsFlagSet(UtilGetFeatureFlags((_Config)), LxInitFeatureVirtIoFs))
+#define WSL_USE_VIRTIO_9P() (WI_IsFlagSet(UtilGetFeatureFlags(), LxInitFeatureVirtIo9p))
+#define WSL_USE_VIRTIO_FS() (WI_IsFlagSet(UtilGetFeatureFlags(), LxInitFeatureVirtIoFs))
 #define WSLG_SHARED_FOLDER "wslg"
 
 #define INIT_MAKE_SECURITY(_uid, _gid, _mode) {_uid, _gid, _mode}
@@ -399,16 +400,16 @@ std::set<std::pair<unsigned int, std::string>> ConfigGetMountedDrvFsVolumes(void
 std::vector<std::pair<std::string, std::string>> ConfigGetWslgEnvironmentVariables(const wsl::linux::WslDistributionConfig& Config);
 
 void ConfigHandleInteropMessage(
-    wsl::shared::SocketChannel& ResponseChannel,
+    wsl::shared::Transaction& Transaction,
     wsl::shared::SocketChannel& InteropChannel,
     bool Elevated,
     gsl::span<gsl::byte> Message,
     const MESSAGE_HEADER* Header,
     const wsl::linux::WslDistributionConfig& Config);
 
-void ConfigInitializeCgroups(void);
+void ConfigInitializeCgroups(wsl::linux::WslDistributionConfig& Config);
 
-int ConfigInitializeInstance(wsl::shared::SocketChannel& Channel, gsl::span<gsl::byte> Buffer, wsl::linux::WslDistributionConfig& Config);
+int ConfigInitializeInstance(const std::function<void(const gsl::span<gsl::byte>&)>& SendResponse, gsl::span<gsl::byte> Buffer, wsl::linux::WslDistributionConfig& Config);
 
 void ConfigMountDrvFsVolumes(unsigned int DrvFsVolumes, uid_t OwnerUid, std::optional<bool> Admin, const wsl::linux::WslDistributionConfig& Config);
 
@@ -420,7 +421,7 @@ int ConfigRegisterBinfmtInterpreter(void);
 
 int ConfigSetMountNamespace(bool Elevated);
 
-int ConfigRemountDrvFs(gsl::span<gsl::byte> Buffer, wsl::shared::SocketChannel& Channel, const wsl::linux::WslDistributionConfig& Config);
+int ConfigRemountDrvFs(gsl::span<gsl::byte> Buffer, wsl::shared::Transaction& Transaction, const wsl::linux::WslDistributionConfig& Config);
 
 int ConfigRemountDrvFsImpl(gsl::span<gsl::byte> Buffer, const wsl::linux::WslDistributionConfig& Config);
 

@@ -14,6 +14,7 @@ Abstract:
 
 #include "precomp.h"
 #include "WslCoreConfig.h"
+#include "helpers.hpp"
 #include "Localization.h"
 #include "WslCoreFirewallSupport.h"
 #include "WslCoreNetworkingSupport.h"
@@ -107,10 +108,10 @@ void wsl::core::Config::ParseConfigFile(_In_opt_ LPCWSTR ConfigFilePath, _In_opt
         ConfigKey(ConfigSetting::MaxCrashDumpCount, MaxCrashDumpCount),
         ConfigKey(ConfigSetting::DistributionInstallPath, DefaultDistributionLocation),
         ConfigKey(ConfigSetting::InstanceIdleTimeout, InstanceIdleTimeout),
-        ConfigKey(ConfigSetting::LoadDefaultKernelModules, LoadDefaultKernelModules, &loadKernelModulesPresence),
-        ConfigKey(ConfigSetting::LoadKernelModules, userKernelModules, &loadKernelModulesPresence),
+        ConfigKey(ConfigSetting::LoadDefaultKernelModules, LoadDefaultKernelModules, &LoadKernelModulesPresence),
+        ConfigKey(ConfigSetting::LoadKernelModules, userKernelModules, &LoadKernelModulesPresence),
 
-        // Features that were previously experimental (the old header is maintained for compatability).
+        // Features that were previously experimental (the old header is maintained for compatibility).
         ConfigKey({ConfigSetting::NetworkingMode, ConfigSetting::Experimental::NetworkingMode}, wsl::core::NetworkingModes, NetworkingMode, &NetworkingModePresence),
         ConfigKey({ConfigSetting::DnsTunneling, ConfigSetting::Experimental::DnsTunneling}, EnableDnsTunneling, &DnsTunnelingConfigPresence),
         ConfigKey({ConfigSetting::Firewall, ConfigSetting::Experimental::Firewall}, enableFirewall, &FirewallConfigPresence),
@@ -124,7 +125,8 @@ void wsl::core::Config::ParseConfigFile(_In_opt_ LPCWSTR ConfigFilePath, _In_opt
         ConfigKey(ConfigSetting::Experimental::InitialAutoProxyTimeout, InitialAutoProxyTimeout),
         ConfigKey(ConfigSetting::Experimental::IgnoredPorts, std::move(parseIgnoredPorts)),
         ConfigKey(ConfigSetting::Experimental::HostAddressLoopback, EnableHostAddressLoopback),
-        ConfigKey(ConfigSetting::Experimental::SetVersionDebug, SetVersionDebug)};
+        ConfigKey(ConfigSetting::Experimental::SetVersionDebug, SetVersionDebug),
+        ConfigKey(ConfigSetting::Experimental::Swiotlb, MemoryString(SwiotlbSizeBytes))};
 
     wil::unique_file ConfigFile;
     if (ConfigFilePath != nullptr)
@@ -194,15 +196,18 @@ void wsl::core::Config::ParseConfigFile(_In_opt_ LPCWSTR ConfigFilePath, _In_opt
         DefaultDistributionLocation = wsl::windows::common::filesystem::GetLocalAppDataPath(UserToken) / "wsl";
     }
 
-    if (!LoadDefaultKernelModules)
+    auto kernelModules =
+        LoadDefaultKernelModules ? std::vector<std::wstring>{L"tun", L"ip_tables", L"br_netfilter"} : std::vector<std::wstring>{};
+
+    if (!userKernelModules.empty())
     {
-        KernelModulesList.clear();
+        for (const auto& e : wsl::shared::string::Split(userKernelModules, L','))
+        {
+            kernelModules.emplace_back(std::move(e));
+        }
     }
 
-    for (auto& e : wsl::shared::string::Split(userKernelModules, L','))
-    {
-        KernelModulesList.emplace_back(std::move(e));
-    }
+    KernelModulesList = wsl::shared::string::Join(kernelModules, L',');
 }
 
 void wsl::core::Config::SaveNetworkingSettings(_In_opt_ HANDLE UserToken) const
@@ -287,7 +292,7 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
 {
     // Determine the maximum number of processors that can be added to the VM.
     // If the user did not supply a processor count, use the maximum.
-    const auto MaximumProcessorCount = wsl::windows::common::wslutil::GetLogicalProcessorCount();
+    MaximumProcessorCount = wsl::windows::common::wslutil::GetLogicalProcessorCount();
     if (ProcessorCount <= 0)
     {
         ProcessorCount = MaximumProcessorCount;
@@ -314,10 +319,10 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
         MemorySizeBytes = std::min<UINT64>(MemorySizeBytes, MaximumMemorySizeBytes);
     }
 
-    // Use the user-defined swap size if one was specified, otherwise set to 25%
+    // Use the user-defined swap size if one was specified; otherwise, set to 25%
     // the memory size rounded up to the nearest GB.
     //
-    // N.B. This heuristic is modeled after RedHat and Ubuntu's recommended swap size.
+    // N.B. This heuristic is modeled after Red Hat and Ubuntu's recommended swap size.
     if (SwapSizeBytes == UINT64_MAX)
     {
         SwapSizeBytes = ((MemorySizeBytes / 4 + _1GB - 1) & ~(_1GB - 1));
@@ -356,7 +361,7 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
         case wsl::core::NetworkingMode::None:
         case wsl::core::NetworkingMode::Nat:
         case wsl::core::NetworkingMode::Mirrored:
-        case wsl::core::NetworkingMode::VirtioProxy:
+        case wsl::core::NetworkingMode::Consomme:
             defaultNetworkingMode = static_cast<wsl::core::NetworkingMode>(setting.value());
             break;
 
@@ -395,47 +400,23 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
         }
     }
 
-    // Load NAT configuration from the registry.
-    if (NetworkingMode == wsl::core::NetworkingMode::Nat)
-        try
-        {
-            const auto machineKey = wsl::windows::common::registry::OpenLxssMachineKey();
-            NatGateway = wsl::windows::common::registry::ReadString(machineKey.get(), nullptr, c_natGatewayAddress, L"");
-            NatNetwork = wsl::windows::common::registry::ReadString(machineKey.get(), nullptr, c_natNetwork, L"");
-
-            auto runAsUser = wil::impersonate_token(UserToken);
-            const auto userKey = wsl::windows::common::registry::OpenLxssUserKey();
-            NatIpAddress = wsl::windows::common::registry::ReadString(userKey.get(), nullptr, c_natIpAddress, L"");
-        }
-    CATCH_LOG()
-
     // Due to an issue with Global Secure Access Client, do not use DNS tunneling if the service is present.
     if (EnableDnsTunneling)
+    {
         try
         {
-            // Open a handle to the service control manager and check if the inbox service is registered.
-            const wil::unique_schandle manager{OpenSCManager(nullptr, nullptr, SC_MANAGER_ENUMERATE_SERVICE)};
-            THROW_LAST_ERROR_IF(!manager);
-
-            // Check if the service is running.
-            const wil::unique_schandle service{OpenServiceW(manager.get(), L"GlobalSecureAccessTunnelingService", SERVICE_QUERY_STATUS)};
-            if (service)
+            if (wsl::windows::common::helpers::IsServiceRunning(L"GlobalSecureAccessTunnelingService"))
             {
-                SERVICE_STATUS status;
-                THROW_IF_WIN32_BOOL_FALSE(QueryServiceStatus(service.get(), &status));
-
-                if (status.dwCurrentState != SERVICE_STOPPED)
+                if (DnsTunnelingConfigPresence == ConfigKeyPresence::Present)
                 {
-                    if (DnsTunnelingConfigPresence == ConfigKeyPresence::Present)
-                    {
-                        EMIT_USER_WARNING(wsl::shared::Localization::MessageDnsTunnelingDisabled());
-                    }
-
-                    EnableDnsTunneling = false;
+                    EMIT_USER_WARNING(wsl::shared::Localization::MessageDnsTunnelingDisabled());
                 }
+
+                EnableDnsTunneling = false;
             }
         }
-    CATCH_LOG()
+        CATCH_LOG()
+    }
 
     // Ensure that settings are consistent (disable features that require other features that are not present).
     if (EnableSafeMode)
@@ -459,6 +440,13 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
     {
         VALIDATE_CONFIG_OPTION(!EnableVirtio, EnableVirtio9p, false);
         VALIDATE_CONFIG_OPTION(!EnableVirtio, EnableVirtioFs, false);
+        VALIDATE_CONFIG_OPTION(!EnableVirtio, SwiotlbSizeBytes, 0);
+
+        if (NetworkingMode == NetworkingMode::Consomme)
+        {
+            NetworkingMode = (defaultNetworkingMode == NetworkingMode::Consomme) ? NetworkingMode::None : NetworkingMode::Nat;
+            EMIT_USER_WARNING(wsl::shared::Localization::MessageConsommeRequiresVirtio(ToString(NetworkingMode)));
+        }
     }
 
     if (EnableVirtio9p)
@@ -467,9 +455,19 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
         EnableVirtio9p = false;
     }
 
-    if (NetworkingMode != NetworkingMode::Nat && NetworkingMode != NetworkingMode::Mirrored)
+    // Compute a default swiotlb config only when a virtio device that requires bounce buffers is present.
+    // N.B. Must run after policy overrides so networking/fs modes reflect final values.
+    if (SwiotlbSizeBytes == 0 && (EnableVirtioFs || EnableVirtio9p || (NetworkingMode == NetworkingMode::Consomme)))
     {
-        VALIDATE_CONFIG_OPTION((NetworkingMode != NetworkingMode::Nat && NetworkingMode != NetworkingMode::Mirrored), EnableDnsTunneling, false);
+        SwiotlbSizeBytes = wsl::windows::common::helpers::ComputeDefaultSwiotlbConfig(MemorySizeBytes);
+    }
+
+    if (NetworkingMode != NetworkingMode::Nat && NetworkingMode != NetworkingMode::Mirrored && NetworkingMode != NetworkingMode::Consomme)
+    {
+        VALIDATE_CONFIG_OPTION(
+            (NetworkingMode != NetworkingMode::Nat && NetworkingMode != NetworkingMode::Mirrored && NetworkingMode != NetworkingMode::Consomme),
+            EnableDnsTunneling,
+            false);
     }
 
     if (!EnableDnsTunneling)
@@ -482,6 +480,23 @@ void wsl::core::Config::Initialize(_In_opt_ HANDLE UserToken)
     {
         VALIDATE_CONFIG_OPTION((NetworkingMode != NetworkingMode::Mirrored), IgnoredPorts, std::set<uint16_t>{});
         VALIDATE_CONFIG_OPTION((NetworkingMode != NetworkingMode::Mirrored), EnableHostAddressLoopback, false);
+    }
+
+    // Load NAT configuration from the registry.
+    // N.B. This must be done after all networking mode adjustments (e.g. Consomme -> NAT fallback).
+    if (NetworkingMode == wsl::core::NetworkingMode::Nat)
+    {
+        try
+        {
+            const auto machineKey = wsl::windows::common::registry::OpenLxssMachineKey();
+            NatGateway = wsl::windows::common::registry::ReadString(machineKey.get(), nullptr, c_natGatewayAddress, L"");
+            NatNetwork = wsl::windows::common::registry::ReadString(machineKey.get(), nullptr, c_natNetwork, L"");
+
+            auto runAsUser = wil::impersonate_token(UserToken);
+            const auto userKey = wsl::windows::common::registry::OpenLxssUserKey();
+            NatIpAddress = wsl::windows::common::registry::ReadString(userKey.get(), nullptr, c_natIpAddress, L"");
+        }
+        CATCH_LOG()
     }
 }
 
