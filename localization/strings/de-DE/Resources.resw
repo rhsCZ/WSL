@@ -1136,9 +1136,9 @@ Es wird versucht,...</value>
   <data name="MessageConfigVirtio9pDisabled" xml:space="preserve">
     <value>wsl2.virtio9p ist deaktiviert und fällt mit vsock-Transport auf 9p zurück.</value>
   </data>
-  <data name="MessageVirtioProxyRequiresVirtio" xml:space="preserve">
-    <value>VirtioProxy-Netzwerkfunktionen werden nicht unterstützt, wenn wsl2.virtio deaktiviert ist; es wird auf networkingMode {} zurückgegriffen.</value>
-    <comment>{Locked="wsl2.virtio"}{Locked="VirtioProxy"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  <data name="MessageConsommeRequiresVirtio" xml:space="preserve">
+    <value>Consomme-Netzwerk wird nicht unterstützt, wenn wsl2.virtio deaktiviert ist; es wird auf networkingMode {} zurückgegriffen.</value>
+    <comment>{Locked="wsl2.virtio"}{Locked="Consomme"}{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageSwiotlbKernelUnsupported" xml:space="preserve">
     <value>Dem laufenden Kernel fehlt ein Patch, der die Leistung von virtio-Geräten deutlich verbessert. Aktualisieren Sie auf einen neueren WSL-Kernel, um diese Optimierung zu aktivieren.</value>
@@ -1782,7 +1782,8 @@ Linux-Binärdateien, die in WSL ausgeführt werden, können Ihre GPU in Windows 
   <data name="Settings_OOBEVSCodeIntegration_VSCodeInstallSample.Text" xml:space="preserve">
     <value>Nachdem Sie VS Code installiert haben, können Sie die Remote-WSL-Erweiterung über das Windows-Terminal installieren:
 
-„code –install-extension ms-vscode-remote.remote-wsl“</value>
+„code --install-extension ms-vscode-remote.remote-wsl“</value>
+    <comment>{Locked="--install-extension "}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="Settings_OOBEVSCodeIntegration_VSCodeOpenProjectTitle.Text" xml:space="preserve">
     <value>WSL-Projekt in Visual Studio Code öffnen</value>
@@ -2066,6 +2067,10 @@ Verwendung:
   </data>
   <data name="MessageInvalidIp" xml:space="preserve">
     <value>Ungültige IP-Adresse „{}“</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageFailedToMapPort" xml:space="preserve">
+    <value>Fehler beim Zuordnen von Port „{}“, {}</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageWslcOpenSessionFailed" xml:space="preserve">
@@ -2404,6 +2409,14 @@ Datenschutzinformationen zu diesem Produkt finden Sie unter https://aka.ms/priva
   </data>
   <data name="MessageWslcSessionStorageNotFound" xml:space="preserve">
     <value>Keine WSLC-Sitzung in „{}“ gefunden</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcSessionStorageMustBeEmpty" xml:space="preserve">
+    <value>Kann '{}' nicht als Sitzungspeicher verwenden, da das Verzeichnis nicht leer ist.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="MessageWslcSessionStorageMustBeDirectory" xml:space="preserve">
+    <value>'{}' kann nicht als Sitzungsspeicher verwendet werden, da es kein Verzeichnis ist.</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="MessageWslcTagImageInvalidFormat" xml:space="preserve">
