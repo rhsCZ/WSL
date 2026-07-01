@@ -160,6 +160,11 @@ WSLCExecutionResult RunWslc(const std::wstring& commandLine, ElevationType eleva
         process.SetToken(nonElevatedToken.get());
     }
 
+    auto nul = wsl::windows::common::filesystem::OpenNulDevice(GENERIC_READ);
+    THROW_IF_WIN32_BOOL_FALSE(SetHandleInformation(nul.get(), HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
+
+    process.SetStdHandles(nul.get(), nullptr, nullptr);
+
     const auto output = process.RunAndCaptureOutput();
     return {.CommandLine = commandLine, .Stdout = output.Stdout, .Stderr = output.Stderr, .ExitCode = output.ExitCode};
 }
@@ -224,6 +229,27 @@ WSLCExecutionResult RunWslcAndRedirectToFile(const std::wstring& commandLine, st
     const auto stdErrOutput = wsl::shared::string::MultiByteToWide(ReadToString(parentStderrRead.get()));
 
     return {.CommandLine = std::move(effectiveCommandLine), .Stdout = L"", .Stderr = stdErrOutput, .ExitCode = exitCode};
+}
+
+void WaitForContainerOutput(const std::wstring& containerName, std::string_view expected, std::chrono::milliseconds timeout)
+{
+    auto cmd = std::format(L"\"{}\" container logs -f {}", GetWslcPath(), containerName);
+
+    auto [parentStdoutRead, childStdoutWrite] = wslutil::OpenAnonymousPipe(65536, true, false);
+    THROW_IF_WIN32_BOOL_FALSE(SetHandleInformation(childStdoutWrite.get(), HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
+
+    SubProcess process(nullptr, cmd.c_str());
+    process.SetStdHandles(nullptr, childStdoutWrite.get(), nullptr);
+
+    wil::unique_handle processHandle = process.Start();
+    childStdoutWrite.reset();
+
+    auto terminate = wil::scope_exit([&]() {
+        LOG_IF_WIN32_BOOL_FALSE(TerminateProcess(processHandle.get(), 1));
+        LOG_LAST_ERROR_IF(WaitForSingleObject(processHandle.get(), DefaultWaitTimeoutMs) != WAIT_OBJECT_0);
+    });
+
+    WaitForOutput(wil::unique_handle{parentStdoutRead.release()}, expected, timeout);
 }
 
 std::wstring GetWslcHeader()
@@ -391,7 +417,7 @@ void WSLCInteractiveSession::ExpectStderr(const std::string& expected)
 void WSLCInteractiveSession::ExpectCommandEcho(const std::string& command)
 {
     // TTY mode: expect command echo, then B_END and carriage return
-    ExpectStdout(std::format("{}\r\n{}\r", command, VT::B_END));
+    ExpectStdout(std::format("{}\r\n{}\r", command, wsl::shared::string::WideToMultiByte(std::wstring(VT::B_END.Get()))));
 }
 
 void WSLCInteractiveSession::IgnoreSequence(const std::string& sequence)

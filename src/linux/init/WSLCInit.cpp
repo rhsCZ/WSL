@@ -765,7 +765,7 @@ void HandleMessageImpl(
     auto EnvironmentArray = wsl::shared::string::ArrayFromSpan(Buffer, Message.EnvironmentIndex);
     auto EnvironmentPointers = wsl::shared::string::StringPointersFromArray(EnvironmentArray, true);
 
-    execve(Executable, (char* const*)(ArgumentPointers.data()), (char* const*)(EnvironmentPointers.data()));
+    execvpe(Executable, (char* const*)(ArgumentPointers.data()), (char* const*)(EnvironmentPointers.data()));
 
     // Only reached if exec() fails
     Transaction.SendResultMessage<int32_t>(errno);
@@ -781,6 +781,12 @@ void HandleMessageImpl(
     Transaction.SendResultMessage<uint32_t>(SocketAddress.svm_port);
     Channel.Close();
     UtilSetThreadName("PortRelay");
+
+    // If the host end of a relay socket is reset, a write will raise SIGPIPE. Ignore it so
+    // the failure surfaces as an EPIPE return value (handled by the relay loop) instead of
+    // terminating this forked PortRelay process and tearing down the vsock accept listener.
+    THROW_LAST_ERROR_IF(signal(SIGPIPE, SIG_IGN) == SIG_ERR);
+
     RunLocalHostRelay(SocketAddress, ListenSocket.get());
 }
 

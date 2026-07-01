@@ -1,4 +1,5 @@
 set(SOURCES
+    APICompat.cpp
     ConsoleProgressBar.cpp
     ConsoleProgressIndicator.cpp
     ConsoleState.cpp
@@ -35,9 +36,10 @@ set(SOURCES
     string.cpp
     SubProcess.cpp
     svccomm.cpp
+    VTSupport.cpp
     WindowsUpdateIntegration.cpp
     WSLCContainerLauncher.cpp
-    VirtioNetworking.cpp
+    ConsommeNetworking.cpp
     WSLCProcessLauncher.cpp
     WslClient.cpp
     WslCoreConfig.cpp
@@ -57,6 +59,7 @@ set(SOURCES
 
 set(HEADERS
     ../../../generated/Localization.h
+    APICompat.h
     ../inc/docker_schema.h
     ../inc/wslc_schema.h
     ../inc/lxssbusclient.h
@@ -120,9 +123,10 @@ set(HEADERS
     Stringify.h
     SubProcess.h
     svccomm.hpp
+    VTSupport.h
     WindowsUpdateIntegration.h
     WSLCContainerLauncher.h
-    VirtioNetworking.h
+    ConsommeNetworking.h
     WSLCProcessLauncher.h
     WslClient.h
     WslCoreConfig.h

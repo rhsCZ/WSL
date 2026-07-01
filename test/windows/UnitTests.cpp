@@ -2147,7 +2147,7 @@ Error code: Wsl/InstallDistro/WSL_E_DISTRO_NOT_FOUND
         validateWarnings(L"NoEqual", std::format(L"wsl: Expected '=' in {}:21\r\n", wslConfigPath));
         validateWarnings(
             L"networkingMode=InvalidMode",
-            std::format(L"wsl: Invalid value 'InvalidMode' for config key 'wsl2.networkingMode' in {}:2 (Valid values: Bridged, Mirrored, Nat, None, VirtioProxy)\r\n", wslConfigPath),
+            std::format(L"wsl: Invalid value 'InvalidMode' for config key 'wsl2.networkingMode' in {}:2 (Valid values: Bridged, Consomme, Mirrored, Nat, None, VirtioProxy)\r\n", wslConfigPath),
             L"[wsl2]\n");
         validateWarnings(
             L"networkingMode=a\\m", std::format(L"wsl: Invalid escaped character: 'm' in {}:2\r\n", wslConfigPath), L"[wsl2]\n");
@@ -2166,7 +2166,7 @@ Error code: Wsl/InstallDistro/WSL_E_DISTRO_NOT_FOUND
         validateWarnings(L"debugConsole=", std::format(L"wsl: Invalid boolean value '' for key 'wsl2.debugConsole' in {}:21\r\n", wslConfigPath));
         validateWarnings(
             L"networkingMode=",
-            std::format(L"wsl: Invalid value '' for config key 'wsl2.networkingMode' in {}:21 (Valid values: Bridged, Mirrored, Nat, None, VirtioProxy)\r\n", wslConfigPath));
+            std::format(L"wsl: Invalid value '' for config key 'wsl2.networkingMode' in {}:21 (Valid values: Bridged, Consomme, Mirrored, Nat, None, VirtioProxy)\r\n", wslConfigPath));
 
         validateWarnings(
             L"ipv6=true\nipv6=false",
@@ -2289,6 +2289,67 @@ Error code: Wsl/InstallDistro/WSL_E_DISTRO_NOT_FOUND
         auto [output, warnings] = LxsstuLaunchWslAndCaptureOutput(L"nproc --all");
         VERIFY_ARE_EQUAL(L"1\n", output);
         VERIFY_ARE_EQUAL(L"", warnings);
+    }
+
+    WSL2_TEST_METHOD(DmesgCollection)
+    {
+        const auto dmesgLogFile = std::filesystem::current_path() / L"test-dmesg.txt";
+        auto cleanup = wil::scope_exit_log(WI_DIAGNOSTICS_INFO, [&]() { DeleteFile(dmesgLogFile.c_str()); });
+        WslConfigChange config(LxssGenerateTestConfig({}));
+
+        auto readDmesgLog = [&](uint64_t offset) -> std::string {
+            wil::unique_hfile file(CreateFileW(
+                dmesgLogFile.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+            if (!file)
+            {
+                return {};
+            }
+
+            LARGE_INTEGER fileOffset{};
+            fileOffset.QuadPart = static_cast<LONGLONG>(offset);
+            THROW_LAST_ERROR_IF(!SetFilePointerEx(file.get(), fileOffset, nullptr, FILE_BEGIN));
+
+            return ReadToString(file.get());
+        };
+
+        auto fileSize = [&]() -> uint64_t {
+            WIN32_FILE_ATTRIBUTE_DATA attributes{};
+            if (!GetFileAttributesExW(dmesgLogFile.c_str(), GetFileExInfoStandard, &attributes))
+            {
+                return 0;
+            }
+
+            return (static_cast<uint64_t>(attributes.nFileSizeHigh) << 32) | attributes.nFileSizeLow;
+        };
+
+        auto expectInDmesg = [&](bool earlyBootLogging, const std::string_view& expectedLine) -> std::string {
+            config.Update(LxssGenerateTestConfig({.earlyBootLogging = earlyBootLogging, .debugConsoleLogFile = dmesgLogFile}));
+
+            const auto offset = fileSize();
+
+            VERIFY_ARE_EQUAL(LxsstuLaunchWsl(L"/bin/true"), 0L);
+
+            return wsl::shared::retry::RetryWithTimeout<std::string>(
+                [&]() {
+                    auto content = readDmesgLog(offset);
+                    THROW_HR_IF(E_FAIL, content.find(expectedLine) == std::string::npos);
+
+                    return content;
+                },
+                std::chrono::milliseconds(100),
+                std::chrono::seconds(120));
+        };
+
+        // 'Linux version' is printed during early boot. 'brd: module loaded' is printed after transitioning to the virtio console.
+        {
+            auto dmesg = expectInDmesg(true, "brd: module loaded");
+            VERIFY_ARE_NOT_EQUAL(dmesg.find("Linux version"), std::string::npos);
+        }
+
+        {
+            auto dmesg = expectInDmesg(false, "brd: module loaded");
+            VERIFY_ARE_EQUAL(dmesg.find("Linux version"), std::string::npos);
+        }
     }
 
     WSL2_TEST_METHOD(GuiApplications)
@@ -3594,7 +3655,7 @@ EOF
                 {NetworkingConfiguration::Nat, NetworkingConfiguration::Nat},
                 {NetworkingConfiguration::Bridged, NetworkingConfiguration::Bridged},
                 {NetworkingConfiguration::Mirrored, NetworkingConfiguration::Mirrored},
-                {NetworkingConfiguration::VirtioProxy, NetworkingConfiguration::VirtioProxy},
+                {NetworkingConfiguration::Consomme, NetworkingConfiguration::Consomme},
             };
 
             // tuple: WslConfigSetting, expectedValue, actualValue

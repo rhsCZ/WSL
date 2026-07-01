@@ -58,7 +58,7 @@ class WSLCE2EImageSaveTests
     WSLC_TEST_METHOD(WSLCE2E_Image_Save_ImageNotFound)
     {
         const auto result = RunWslc(std::format(L"image save --output \"{}\" {}", SavedArchivePath.wstring(), InvalidImage.NameAndTag()));
-        result.Verify({.Stdout = L"", .Stderr = L"reference does not exist\r\nError code: E_FAIL\r\n", .ExitCode = 1});
+        result.Verify({.Stdout = L"", .Stderr = L"reference does not exist\r\nError code: WSLC_E_IMAGE_NOT_FOUND\r\n", .ExitCode = 1});
     }
 
     WSLC_TEST_METHOD(WSLCE2E_Image_Save_Success)
@@ -212,7 +212,6 @@ private:
         std::wstringstream options;
         options << L"The following options are available:\r\n"                 //
                 << L"  -o,--output  Path for the saved image\r\n"              //
-                << L"  --session    Specify the session to use\r\n"            //
                 << L"  -?,--help    Shows help about the selected command\r\n" //
                 << L"\r\n";
         return options.str();

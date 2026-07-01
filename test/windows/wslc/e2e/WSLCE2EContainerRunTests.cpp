@@ -416,6 +416,8 @@ class WSLCE2EContainerRunTests
             GetPythonHttpServerScript(ContainerTestPort)));
         result.Verify({.Stderr = L"", .ExitCode = 0});
 
+        WaitForContainerOutput(WslcContainerName, "Serving HTTP on");
+
         // From the host side, verify we can connect to both ports
         ExpectHttpResponse(std::format(L"http://127.0.0.1:{}", HostTestPort1).c_str(), HTTP_STATUS_OK, true);
         ExpectHttpResponse(std::format(L"http://127.0.0.1:{}", HostTestPort2).c_str(), HTTP_STATUS_OK, true);
@@ -443,7 +445,9 @@ class WSLCE2EContainerRunTests
         auto startResult = RunWslc(std::format(L"container start {}", containerId));
         startResult.Verify(
             {.Stderr = std::format(
-                 L"Port 127.0.0.1:{}/tcp is already in use, cannot start container {}\r\nError code: ERROR_ALREADY_EXISTS\r\n", HostTestPort1, containerId),
+                 L"Failed to map port '127.0.0.1:{}/tcp', Only one usage of each socket address (protocol/network "
+                 L"address/port) is normally permitted. \r\nError code: WSAEADDRINUSE\r\n",
+                 HostTestPort1),
              .ExitCode = 1});
 
         // Clean up the created container
@@ -455,15 +459,46 @@ class WSLCE2EContainerRunTests
         runResult.Verify({.ExitCode = 1});
 
         VerifyContainerIsNotListed(WslcContainerName2);
+
+        // Repeat the conflict scenario for an IPv6 loopback ([::1]) binding to validate the IPv6 error message.
+        auto ipv6Server = RunWslc(std::format(
+            L"container run -d --name {} -p [::1]:{}:{} {} {}",
+            WslcContainerName2,
+            HostTestPort2,
+            ContainerTestPort,
+            PythonImage.NameAndTag(),
+            GetPythonHttpServerScript(ContainerTestPort)));
+        ipv6Server.Verify({.Stderr = L"", .ExitCode = 0});
+
+        // Create a second container mapping the same IPv6 address/port to validate the full error message.
+        auto ipv6CreateResult =
+            RunWslc(std::format(L"container create -p [::1]:{}:{} {}", HostTestPort2, ContainerTestPort, DebianImage.NameAndTag()));
+        ipv6CreateResult.Verify({.Stderr = L"", .ExitCode = 0});
+        auto ipv6ContainerId = ipv6CreateResult.GetStdoutOneLine();
+
+        auto cleanup = wil::scope_exit_log(WI_DIAGNOSTICS_INFO, [&]() {
+            RunWslc(std::format(L"container rm {}", ipv6ContainerId)).Verify({.Stderr = L"", .ExitCode = 0});
+        });
+
+        // Attempt to start — should fail with a port conflict, with the IPv6 address bracketed in the message.
+        auto ipv6StartResult = RunWslc(std::format(L"container start {}", ipv6ContainerId));
+        ipv6StartResult.Verify(
+            {.Stderr = std::format(
+                 L"Failed to map port '[::1]:{}/tcp', Only one usage of each socket address (protocol/network "
+                 L"address/port) is normally permitted. \r\nError code: WSAEADDRINUSE\r\n",
+                 HostTestPort2),
+             .ExitCode = 1});
     }
 
-    // https://github.com/microsoft/WSL/issues/14433
     WSLC_TEST_METHOD(WSLCE2E_Container_Run_PortEphemeral)
     {
         // Start a container with an ephemeral host port mapping (-p 8080 means host picks a random port)
         auto result = RunWslc(std::format(
             L"container run -d --name {} -p {} {} {}", WslcContainerName, ContainerTestPort, PythonImage.NameAndTag(), GetPythonHttpServerScript(ContainerTestPort)));
         result.Verify({.Stderr = L"", .ExitCode = 0});
+
+        // Wait for the in-container HTTP server to start listening before connecting.
+        WaitForContainerOutput(WslcContainerName, "Serving HTTP on");
 
         // Inspect the container to find the allocated host port
         auto inspectContainer = InspectContainer(WslcContainerName);
@@ -480,18 +515,125 @@ class WSLCE2EContainerRunTests
         ExpectHttpResponse(std::format(L"http://127.0.0.1:{}", hostPort).c_str(), HTTP_STATUS_OK, true);
     }
 
-    // https://github.com/microsoft/WSL/issues/14433
-    WSLC_TEST_METHOD(WSLCE2E_Container_Run_PortUdp_NotSupported)
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_Port_UDP)
     {
-        auto result = RunWslc(std::format(L"container run -p 80:80/udp {}", DebianImage.NameAndTag()));
-        result.Verify({.Stderr = L"Port mappings with specific host IPs or UDP protocol are not currently supported\r\nError code: ERROR_NOT_SUPPORTED\r\n", .ExitCode = 1});
+        // Start a container with a UDP echo server listening on a port.
+        auto result = RunWslc(std::format(
+            L"container run -d --name {} -p {}:{}/udp {} {}",
+            WslcContainerName,
+            HostTestPort1,
+            ContainerTestPort,
+            PythonImage.NameAndTag(),
+            GetPythonUdpEchoServerScript(ContainerTestPort)));
+        result.Verify({.Stderr = L"", .ExitCode = 0});
+
+        // Send a datagram from the host and verify the container echoes it back uppercased.
+        SendUdpAndReceive(HostTestPort1, "hello", "HELLO");
+
+        // Verify the UDP port mapping is reflected in the container inspect data.
+        auto inspectContainer = InspectContainer(WslcContainerName);
+        auto portKey = std::to_string(ContainerTestPort) + "/udp";
+        VERIFY_IS_TRUE(inspectContainer.Ports.contains(portKey));
+
+        auto portBindings = inspectContainer.Ports[portKey];
+        VERIFY_ARE_EQUAL(1u, portBindings.size());
+        VERIFY_ARE_EQUAL(std::to_string(HostTestPort1), portBindings[0].HostPort);
+        VERIFY_ARE_EQUAL("127.0.0.1", portBindings[0].HostIp);
     }
 
     // https://github.com/microsoft/WSL/issues/14433
-    WSLC_TEST_METHOD(WSLCE2E_Container_Run_PortHostIP_NotSupported)
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_Port_HostIP)
     {
-        auto result = RunWslc(std::format(L"container run -p 127.0.0.1:80:80 {}", DebianImage.NameAndTag()));
-        result.Verify({.Stderr = L"Port mappings with specific host IPs or UDP protocol are not currently supported\r\nError code: ERROR_NOT_SUPPORTED\r\n", .ExitCode = 1});
+        // Start a container with a server listening on a port, bound to a specific host IP (127.0.0.1).
+        auto result = RunWslc(std::format(
+            L"container run -d --name {} -p 127.0.0.1:{}:{} {} {}",
+            WslcContainerName,
+            HostTestPort1,
+            ContainerTestPort,
+            PythonImage.NameAndTag(),
+            GetPythonHttpServerScript(ContainerTestPort)));
+        result.Verify({.Stderr = L"", .ExitCode = 0});
+
+        WaitForContainerOutput(WslcContainerName, "Serving HTTP on");
+
+        ExpectHttpResponse(std::format(L"http://127.0.0.1:{}", HostTestPort1).c_str(), HTTP_STATUS_OK, true);
+
+        auto inspectContainer = InspectContainer(WslcContainerName);
+        auto portKey = std::to_string(ContainerTestPort) + "/tcp";
+        VERIFY_IS_TRUE(inspectContainer.Ports.contains(portKey));
+
+        auto portBindings = inspectContainer.Ports[portKey];
+        VERIFY_ARE_EQUAL(1u, portBindings.size());
+        VERIFY_ARE_EQUAL(std::to_string(HostTestPort1), portBindings[0].HostPort);
+        VERIFY_ARE_EQUAL("127.0.0.1", portBindings[0].HostIp);
+    }
+
+    // Verifies that 'session.defaultBindingAddress: default' resolves to the built-in
+    // loopback default (127.0.0.1) for a published port specified without an explicit host IP.
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_Port_DefaultBindingAddress_Default)
+    {
+        const auto settingsPath = wsl::windows::common::filesystem::GetLocalAppDataPath(nullptr) / L"wslc" / L"settings.yaml";
+        HostFileChange settings(settingsPath, "session:\n  defaultBindingAddress: default\n");
+
+        auto result = RunWslc(std::format(
+            L"container run -d --name {} -p {}:{} {} {}",
+            WslcContainerName,
+            HostTestPort1,
+            ContainerTestPort,
+            PythonImage.NameAndTag(),
+            GetPythonHttpServerScript(ContainerTestPort)));
+        result.Verify({.Stderr = L"", .ExitCode = 0});
+
+        WaitForContainerOutput(WslcContainerName, "Serving HTTP on");
+
+        ExpectHttpResponse(std::format(L"http://127.0.0.1:{}", HostTestPort1).c_str(), HTTP_STATUS_OK, true);
+
+        auto inspectContainer = InspectContainer(WslcContainerName);
+        auto portKey = std::to_string(ContainerTestPort) + "/tcp";
+        VERIFY_IS_TRUE(inspectContainer.Ports.contains(portKey));
+
+        auto portBindings = inspectContainer.Ports[portKey];
+        VERIFY_ARE_EQUAL(1u, portBindings.size());
+        VERIFY_ARE_EQUAL(std::to_string(HostTestPort1), portBindings[0].HostPort);
+        VERIFY_ARE_EQUAL("127.0.0.1", portBindings[0].HostIp);
+    }
+
+    // Verifies that a configured 'session.defaultBindingAddress' overrides the loopback
+    // default for a published port specified without an explicit host IP.
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_Port_DefaultBindingAddress_Override)
+    {
+        const auto hostIp = GetHostAdapterIpv4();
+        if (!hostIp.has_value())
+        {
+            WEX::Logging::Log::Comment(L"Skipping: no suitable non-loopback host IPv4 address was found.");
+            return;
+        }
+
+        const auto settingsPath = wsl::windows::common::filesystem::GetLocalAppDataPath(nullptr) / L"wslc" / L"settings.yaml";
+        HostFileChange settings(settingsPath, std::format("session:\n  defaultBindingAddress: {}\n", *hostIp));
+
+        auto result = RunWslc(std::format(
+            L"container run -d --name {} -p {}:{} {} {}",
+            WslcContainerName,
+            HostTestPort1,
+            ContainerTestPort,
+            PythonImage.NameAndTag(),
+            GetPythonHttpServerScript(ContainerTestPort)));
+        result.Verify({.Stderr = L"", .ExitCode = 0});
+
+        WaitForContainerOutput(WslcContainerName, "Serving HTTP on");
+
+        const auto hostIpWide = std::wstring(hostIp->begin(), hostIp->end());
+        ExpectHttpResponse(std::format(L"http://{}:{}", hostIpWide, HostTestPort1).c_str(), HTTP_STATUS_OK, true);
+
+        auto inspectContainer = InspectContainer(WslcContainerName);
+        auto portKey = std::to_string(ContainerTestPort) + "/tcp";
+        VERIFY_IS_TRUE(inspectContainer.Ports.contains(portKey));
+
+        auto portBindings = inspectContainer.Ports[portKey];
+        VERIFY_ARE_EQUAL(1u, portBindings.size());
+        VERIFY_ARE_EQUAL(std::to_string(HostTestPort1), portBindings[0].HostPort);
+        VERIFY_ARE_EQUAL(*hostIp, portBindings[0].HostIp);
     }
 
     WSLC_TEST_METHOD(WSLCE2E_Container_Run_Port_TCP)
@@ -505,6 +647,9 @@ class WSLCE2EContainerRunTests
             PythonImage.NameAndTag(),
             GetPythonHttpServerScript(ContainerTestPort)));
         result.Verify({.Stderr = L"", .ExitCode = 0});
+
+        // Wait for the in-container HTTP server to start listening before connecting.
+        WaitForContainerOutput(WslcContainerName, "Serving HTTP on");
 
         // Verify we can connect to the server from the host side
         ExpectHttpResponse(std::format(L"http://127.0.0.1:{}", HostTestPort1).c_str(), HTTP_STATUS_OK, true);
@@ -711,6 +856,59 @@ class WSLCE2EContainerRunTests
         auto result = RunWslc(std::format(
             L"container run --rm --network does-not-exist --name {} {} true", WslcContainerName, DebianImage.NameAndTag()));
         result.Verify({.Stderr = L"Network not found: 'does-not-exist'\r\nError code: WSLC_E_NETWORK_NOT_FOUND\r\n", .ExitCode = 1});
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_NetworkAlias_Success)
+    {
+        auto result = RunWslc(std::format(L"network create --driver bridge {}", TestNetworkName));
+        result.Verify({.Stderr = L"", .ExitCode = 0});
+        auto cleanupNetwork = wil::scope_exit([&] { EnsureNetworkDoesNotExist(TestNetworkName); });
+
+        result = RunWslc(std::format(
+            L"container run --name {} --network {} --network-alias db {} true", WslcContainerName, TestNetworkName, DebianImage.NameAndTag()));
+        result.Verify({.Stderr = L"", .ExitCode = 0});
+
+        const auto inspect = InspectContainer(WslcContainerName);
+        const auto networkName = wsl::shared::string::WideToMultiByte(TestNetworkName);
+        VERIFY_IS_TRUE(inspect.NetworkSettings.Networks.contains(networkName));
+        const auto& endpoint = inspect.NetworkSettings.Networks.at(networkName);
+        VERIFY_IS_TRUE(std::ranges::find(endpoint.Aliases, "db") != endpoint.Aliases.end());
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_NetworkAlias_NoNetwork_Rejected)
+    {
+        auto result =
+            RunWslc(std::format(L"container run --rm --network-alias db --name {} {} true", WslcContainerName, DebianImage.NameAndTag()));
+        result.Verify(
+            {.Stderr =
+                 L"Network aliases require a user-defined network. Use --network to specify one.\r\nError code: E_INVALIDARG\r\n",
+             .ExitCode = 1});
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_NetworkAlias_NoneMode_Rejected)
+    {
+        auto result = RunWslc(std::format(
+            L"container run --rm --network none --network-alias db --name {} {} true", WslcContainerName, DebianImage.NameAndTag()));
+        result.Verify(
+            {.Stderr =
+                 L"Network aliases require a user-defined network. Use --network to specify one.\r\nError code: E_INVALIDARG\r\n",
+             .ExitCode = 1});
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_NetworkAlias_MultipleNetworks_Rejected)
+    {
+        auto result = RunWslc(std::format(
+            L"container run --rm --network bridge --network bridge --network-alias db --name {} {} true",
+            WslcContainerName,
+            DebianImage.NameAndTag()));
+        result.Verify({.Stderr = L"Network aliases cannot be specified when multiple networks are requested. Use a single --network argument.\r\nError code: E_INVALIDARG\r\n", .ExitCode = 1});
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Container_Run_NetworkAlias_EmptyValue_Rejected)
+    {
+        auto result = RunWslc(
+            std::format(L"container run --rm --network-alias \"\" --name {} {} true", WslcContainerName, DebianImage.NameAndTag()));
+        result.Verify({.Stderr = L"Invalid network-alias value: network alias cannot be empty or whitespace\r\n", .ExitCode = 1});
     }
 
     WSLC_TEST_METHOD(WSLCE2E_Container_Run_Volume_NamedVolume_Success)
@@ -973,10 +1171,10 @@ private:
                 << L"  -m,--memory       Memory limit (e.g. 512M, 1G)\r\n"
                 << L"  --name            Name of the container\r\n"
                 << L"  --network         Connect a container to a network\r\n"
+                << L"  --network-alias   Add a network-scoped alias for the container\r\n"
                 << L"  -p,--publish      Publish a port from a container to host\r\n"
                 << L"  -P,--publish-all  Publish all exposed ports to random host ports\r\n"
                 << L"  --rm              Remove the container after it stops\r\n"
-                << L"  --session         Specify the session to use\r\n"
                 << L"  --shm-size        Size of /dev/shm (e.g. 64M, 1G)\r\n"
                 << L"  --stop-signal     Signal to stop the container\r\n"
                 << L"  --tmpfs           Mount tmpfs to the container at the given path\r\n"
