@@ -328,6 +328,7 @@ void GnsEngine::ProcessDNSChange(Interface& interface, const wsl::shared::hns::D
     GNS_LOG_INFO(
         "Setting DNS search to {}: {} on interfaceName {} ", payload.Search.c_str(), content.str().c_str(), interface.Name().c_str());
 
+    THROW_LAST_ERROR_IF(UtilMkdirPath("/etc", 0755) < 0);
     std::wofstream resolvConf;
     resolvConf.exceptions(std::ofstream::badbit | std::ofstream::failbit);
     resolvConf.open("/etc/resolv.conf", std::ofstream::trunc);
@@ -487,7 +488,8 @@ std::tuple<bool, int> GnsEngine::ProcessNextMessage(wsl::shared::Transaction& tr
                 "LxGnsMessageCreateDeviceRequest [Loopback]: InitializeLoopbackConfiguration deviceName {}, interfaceName {}",
                 wsl::shared::string::GuidToString<char>(createDeviceRequest.lowerEdgeAdapterId.value_or(emptyGuid)).c_str(),
                 gelnic.Name().c_str());
-            manager.InitializeLoopbackConfiguration(gelnic);
+            manager.InitializeLoopbackConfiguration(gelnic, createDeviceRequest.flags);
+
             break;
         }
         default:
