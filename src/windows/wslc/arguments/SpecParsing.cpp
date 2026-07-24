@@ -165,10 +165,9 @@ services::BuildSecret ParseSecretSpec(const std::wstring& spec)
                 spec, std::format(L"source file not found or not a regular file: {}", absPath.wstring())));
         }
 
-        // Read the file's raw bytes and forward them verbatim. The server materializes them into a
-        // root-only tmpfs file inside the VM, so file secrets are byte-exact (binary, embedded NULs,
-        // and arbitrary size all round-trip) - matching Docker's type=file semantics - without ever
-        // mounting a host directory into the VM.
+        // Read the file's raw bytes and forward them verbatim. The server writes them to a host file
+        // exposed to the VM read-only over virtiofs, so file secrets are byte-exact (binary, embedded
+        // NULs, and arbitrary size all round-trip) - matching Docker's type=file semantics.
         std::ifstream file(absPath, std::ios::binary | std::ios::ate);
         THROW_HR_WITH_USER_ERROR_IF(
             E_INVALIDARG,

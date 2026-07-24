@@ -984,6 +984,30 @@ try
 
     THROW_HR_IF(HRESULT_FROM_WIN32(ERROR_INVALID_STATE), !m_virtualMachine);
 
+    // Registered before unmountAll below so it runs *after* it (scope_exit is LIFO): the per-build
+    // secret directory is removed only once the guest virtiofs mountpoint over the secret root has been
+    // torn down, so the guest can no longer hold the host files open and the removal is far less likely
+    // to fail. secretHostDir is set in the secret block further down; while empty this guard is a no-op.
+    std::filesystem::path secretHostDir;
+    auto removeSecrets = wil::scope_exit_log(WI_DIAGNOSTICS_INFO, [&]() {
+        if (!secretHostDir.empty())
+        {
+            std::error_code ec;
+            std::filesystem::remove_all(secretHostDir, ec);
+            if (ec)
+            {
+                // A failed removal leaves the secret bytes readable on the host for the session
+                // lifetime, so surface it for diagnosis/security auditing. The error text carries only
+                // the directory path, never secret contents, so it is safe to log.
+                WSL_LOG(
+                    "BuildSecretCleanupFailed",
+                    TraceLoggingLevel(WINEVENT_LEVEL_WARNING),
+                    TraceLoggingValue(ec.value(), "ErrorCode"),
+                    TraceLoggingValue(ec.message().c_str(), "Error"));
+            }
+        }
+    });
+
     // Track every Windows folder we mount into the VM during this build so a single scope_exit
     // unmounts them all on success or on any throw partway through the loop below.
     std::vector<std::string> mountedPaths;
@@ -1057,26 +1081,6 @@ try
     // per-build guest mountpoint and removed on completion) so nothing leaks behind and concurrent
     // builds - which only hold a shared lock - can neither read nor delete one another's secrets. The
     // host directory lives under the session user's private LocalAppData, so only that user can read it.
-    std::filesystem::path secretHostDir;
-    auto removeSecrets = wil::scope_exit_log(WI_DIAGNOSTICS_INFO, [&]() {
-        if (!secretHostDir.empty())
-        {
-            std::error_code ec;
-            std::filesystem::remove_all(secretHostDir, ec);
-            if (ec)
-            {
-                // A failed removal leaves the secret bytes readable on the host for the session
-                // lifetime, so surface it for diagnosis/security auditing. The error text carries only
-                // the directory path, never secret contents, so it is safe to log.
-                WSL_LOG(
-                    "BuildSecretCleanupFailed",
-                    TraceLoggingLevel(WINEVENT_LEVEL_WARNING),
-                    TraceLoggingValue(ec.value(), "ErrorCode"),
-                    TraceLoggingValue(ec.message().c_str(), "Error"));
-            }
-        }
-    });
-
     if (Options->Secrets.Count > 0)
     {
         // Stable per-session root (created and crash-reclaimed on first use); its virtiofs share is

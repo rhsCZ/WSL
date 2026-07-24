@@ -410,8 +410,8 @@ class WSLCE2EImageBuildTests
         auto contextDir = SharedSecretBuildContext();
         std::error_code ec;
 
-        // Place the secret OUTSIDE the build context; the client reads its bytes and the server writes
-        // them to a tmpfs file inside the VM, so the secret's directory is never mounted.
+        // Place the secret OUTSIDE the build context; the client reads its bytes and the server exposes
+        // them via its own host virtiofs share, so the secret's directory is never mounted.
         auto secretDir = testRoot / L"secrets";
         std::filesystem::create_directories(secretDir, ec);
         THROW_HR_IF(E_FAIL, ec.value() != 0 || !std::filesystem::exists(secretDir));
@@ -442,8 +442,8 @@ class WSLCE2EImageBuildTests
     WSLC_TEST_METHOD(WSLCE2E_Image_Build_Secret_SrcSymlink_Success)
     {
         // A symlink whose target lives in a separate directory must resolve to the target's content.
-        // The client reads the resolved file's bytes and the server writes them to a tmpfs file inside
-        // the VM, so neither the link's nor the target's directory is ever mounted.
+        // The client reads the resolved file's bytes and the server exposes them via its own host
+        // virtiofs share, so neither the link's nor the target's directory is ever mounted.
         auto imageCleanup = DeleteImageOnExit(BuiltImageSecretSrcSymlink);
         auto testRoot = std::filesystem::current_path() / L"wslc-e2e-build-secret-src-symlink";
         auto cleanup = SetupTestDirectory(testRoot);
