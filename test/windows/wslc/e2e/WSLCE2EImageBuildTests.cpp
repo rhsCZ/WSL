@@ -678,6 +678,114 @@ class WSLCE2EImageBuildTests
         VERIFY_IS_TRUE(inspectData.RepoTags.has_value());
     }
 
+    // Builds a file secret of the given size (filled with a single repeated byte) and asserts, inside the
+    // container, both the exact byte count and that every byte survived intact. Verifies the client->service
+    // transport carries the secret byte-for-byte regardless of size.
+    void RunSizedFileSecretSuccess(const TestImage& image, const std::wstring& subdir, size_t size)
+    {
+        auto imageCleanup = DeleteImageOnExit(image);
+        auto testRoot = std::filesystem::current_path() / subdir;
+        auto cleanup = SetupTestDirectory(testRoot);
+
+        auto contextDir = SharedSecretBuildContext();
+
+        auto secretFile = testRoot / L"secret.bin";
+        WriteTestFileContent(secretFile, std::string(size, 'A'));
+
+        auto dockerfilePath = testRoot / L"Dockerfile";
+        WriteTestFileContent(
+            dockerfilePath,
+            std::format(
+                "# syntax=docker/dockerfile:1\n"
+                "FROM debian:latest\n"
+                "RUN --mount=type=secret,id=mysecret "
+                "[ \"$(wc -c < /run/secrets/mysecret)\" = \"{}\" ] && "
+                "[ -z \"$(tr -d 'A' < /run/secrets/mysecret)\" ]\n"
+                "CMD [\"echo\", \"secret-size-ok\"]\n",
+                size));
+
+        auto buildResult = RunWslc(std::format(
+            L"build \"{}\" -f \"{}\" -t {} --secret id=mysecret,src=\"{}\"",
+            contextDir.wstring(),
+            dockerfilePath.wstring(),
+            image.NameAndTag(),
+            secretFile.wstring()));
+        buildResult.Verify({.ExitCode = 0});
+
+        auto inspectData = InspectImage(image.NameAndTag());
+        VERIFY_IS_TRUE(inspectData.RepoTags.has_value());
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Image_Build_Secret_EmptyFile_Success)
+    {
+        // A zero-byte file secret must mount as an empty (but present) file.
+        auto imageCleanup = DeleteImageOnExit(BuiltImageSecretEmptyFile);
+        auto testRoot = std::filesystem::current_path() / L"wslc-e2e-build-secret-empty-file";
+        auto cleanup = SetupTestDirectory(testRoot);
+
+        auto contextDir = SharedSecretBuildContext();
+
+        auto secretFile = testRoot / L"empty.bin";
+        WriteTestFileContent(secretFile, "");
+
+        auto dockerfilePath = testRoot / L"Dockerfile";
+        WriteTestFileContent(
+            dockerfilePath,
+            "# syntax=docker/dockerfile:1\n"
+            "FROM debian:latest\n"
+            "RUN --mount=type=secret,id=mysecret "
+            "[ -f /run/secrets/mysecret ] && [ \"$(wc -c < /run/secrets/mysecret)\" = \"0\" ]\n"
+            "CMD [\"echo\", \"secret-empty-ok\"]\n");
+
+        auto buildResult = RunWslc(std::format(
+            L"build \"{}\" -f \"{}\" -t {} --secret id=mysecret,src=\"{}\"",
+            contextDir.wstring(),
+            dockerfilePath.wstring(),
+            BuiltImageSecretEmptyFile.NameAndTag(),
+            secretFile.wstring()));
+        buildResult.Verify({.ExitCode = 0});
+
+        auto inspectData = InspectImage(BuiltImageSecretEmptyFile.NameAndTag());
+        VERIFY_IS_TRUE(inspectData.RepoTags.has_value());
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Image_Build_Secret_LargeFile_Success)
+    {
+        // A mid-size (256 KiB) secret is well within BuildKit's cap and exercises a multi-page transport.
+        RunSizedFileSecretSuccess(BuiltImageSecretLarge, L"wslc-e2e-build-secret-large", 256 * 1024);
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Image_Build_Secret_MaxSizeFile_Success)
+    {
+        // Exactly BuildKit's per-secret cap (500 KiB == 512000 bytes) must still succeed.
+        RunSizedFileSecretSuccess(BuiltImageSecretMaxSize, L"wslc-e2e-build-secret-max-size", c_maxSecretSize);
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Image_Build_Secret_OversizeFile_Fails)
+    {
+        // One byte over BuildKit's cap (500 KiB + 1) must be rejected by the daemon at mount time.
+        auto testRoot = std::filesystem::current_path() / L"wslc-e2e-build-secret-oversize";
+        auto cleanup = SetupTestDirectory(testRoot);
+
+        auto contextDir = SharedSecretBuildContext();
+
+        auto secretFile = testRoot / L"oversize.bin";
+        WriteTestFileContent(secretFile, std::string(c_maxSecretSize + 1, 'A'));
+
+        auto dockerfilePath = testRoot / L"Dockerfile";
+        WriteTestFileContent(
+            dockerfilePath,
+            "# syntax=docker/dockerfile:1\n"
+            "FROM debian:latest\n"
+            "RUN --mount=type=secret,id=mysecret cat /run/secrets/mysecret > /dev/null\n");
+
+        auto buildResult = RunWslc(std::format(
+            L"build \"{}\" -f \"{}\" --secret id=mysecret,src=\"{}\"", contextDir.wstring(), dockerfilePath.wstring(), secretFile.wstring()));
+        VERIFY_ARE_EQUAL(1u, buildResult.ExitCode.value_or(0u));
+        VERIFY_IS_TRUE(buildResult.Stderr.has_value());
+        VERIFY_IS_TRUE(buildResult.Stderr->find(L"too big. max size 500KiB") != std::wstring::npos);
+    }
+
     WSLC_TEST_METHOD(WSLCE2E_Image_Build_Secret_UnknownType_Fails)
     {
         auto testRoot = std::filesystem::current_path() / L"wslc-e2e-build-secret-type-bad";
@@ -820,6 +928,12 @@ private:
     const TestImage BuiltImageSecretSrc{L"wslc-e2e-build-secret-src", L"latest", L""};
     const TestImage BuiltImageSecretSrcSymlink{L"wslc-e2e-build-secret-src-symlink", L"latest", L""};
     const TestImage BuiltImageSecretBinary{L"wslc-e2e-build-secret-binary", L"latest", L""};
+    const TestImage BuiltImageSecretEmptyFile{L"wslc-e2e-build-secret-empty-file", L"latest", L""};
+    const TestImage BuiltImageSecretLarge{L"wslc-e2e-build-secret-large", L"latest", L""};
+    const TestImage BuiltImageSecretMaxSize{L"wslc-e2e-build-secret-max-size", L"latest", L""};
+
+    // BuildKit's per-secret cap (MaxSecretSize = 500 * 1024). Secrets at or below this size mount; larger ones are rejected.
+    static constexpr size_t c_maxSecretSize = 500 * 1024;
 
     void BuildFromContextFile(const std::wstring& fileName, const TestImage& image)
     {
