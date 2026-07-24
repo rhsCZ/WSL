@@ -1014,7 +1014,9 @@ try
     auto unmountAll = wil::scope_exit_log(WI_DIAGNOSTICS_INFO, [&]() {
         for (const auto& path : mountedPaths)
         {
-            m_virtualMachine->UnmountWindowsFolder(path.c_str());
+            // Best-effort but not silent: a failed unmount can leave a share mounted and makes the
+            // secret-directory cleanup (removeSecrets) more likely to fail, so log it. Never throw here.
+            LOG_IF_FAILED(m_virtualMachine->UnmountWindowsFolder(path.c_str()));
         }
     });
     auto mountInVm = [&](LPCWSTR windowsPath, BOOL readOnly) -> std::string {
