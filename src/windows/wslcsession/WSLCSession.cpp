@@ -103,6 +103,40 @@ void ValidateName(LPCSTR Name, size_t maxLength)
     THROW_HR_WITH_USER_ERROR_IF(E_INVALIDARG, Localization::MessageWslcInvalidName(Name), i == 0 || i > maxLength);
 }
 
+// Removes build-secret directories under Base that were left behind by crashed sessions. Each live
+// session holds an exclusive lock on its "<dir>\.lock" marker; a directory whose lock we can open
+// (owner gone) or that has no marker (partially created) is stale and removed. Best-effort: any error
+// simply leaves the directory for a later sweep. The caller must not have created its own directory
+// under Base yet, so this never removes the caller's in-use directory.
+void SweepStaleSecretDirs(const std::filesystem::path& Base)
+{
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(Base, ec))
+    {
+        if (ec)
+        {
+            break;
+        }
+
+        if (!entry.is_directory(ec))
+        {
+            continue;
+        }
+
+        const auto lockPath = entry.path() / L".lock";
+        wil::unique_hfile probe(CreateFileW(lockPath.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+        if (!probe && GetLastError() == ERROR_SHARING_VIOLATION)
+        {
+            // A live session still owns this directory - leave it alone.
+            continue;
+        }
+
+        probe.reset();
+        std::error_code removeError;
+        std::filesystem::remove_all(entry.path(), removeError);
+    }
+}
+
 wslc_schema::InspectImage ConvertInspectImage(const docker_schema::InspectImage& dockerInspect)
 {
     wslc_schema::InspectImage wslcInspect{};
@@ -423,6 +457,16 @@ WSLCSession::~WSLCSession()
     WSL_LOG("SessionTerminated", TraceLoggingValue(m_id, "SessionId"), TraceLoggingValue(m_displayName.c_str(), "DisplayName"));
 
     LOG_IF_FAILED(Terminate());
+
+    // Remove this session's host-side build-secret directory. Release the liveness lock first so the
+    // marker file can be deleted; if we crashed before reaching here, the lock is already free and the
+    // next session's sweep reclaims the directory instead.
+    if (!m_secretRoot.empty())
+    {
+        m_secretRootLock.reset();
+        std::error_code ec;
+        std::filesystem::remove_all(m_secretRoot, ec);
+    }
 
     if (m_destructionCallback)
     {
@@ -869,6 +913,36 @@ try
 }
 CATCH_RETURN();
 
+const std::filesystem::path& WSLCSession::EnsureSecretRoot()
+{
+    std::call_once(m_secretRootInit, [this]() {
+        const auto base = wsl::windows::common::filesystem::GetTempFolderPath(GetCurrentProcessToken()) / L"wslc-secrets";
+        std::filesystem::create_directories(base);
+
+        // Reclaim directories from any session that crashed before its destructor ran. Done before we
+        // create our own directory below, so our in-use directory is never a candidate.
+        SweepStaleSecretDirs(base);
+
+        GUID id{};
+        THROW_IF_FAILED(CoCreateGuid(&id));
+        auto root = base / wsl::shared::string::GuidToString<wchar_t>(id, wsl::shared::string::GuidToStringFlags::None);
+        std::filesystem::create_directory(root);
+
+        // Hold an exclusive lock on a marker file for the session's lifetime. While this handle is
+        // open, a concurrent sweep (here or in another process) hits a sharing violation and skips the
+        // directory; once this process exits or crashes, the OS releases the handle and the next sweep
+        // reclaims it.
+        const auto lockPath = root / L".lock";
+        m_secretRootLock.reset(CreateFileW(
+            lockPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY, nullptr));
+        THROW_LAST_ERROR_IF(!m_secretRootLock);
+
+        m_secretRoot = std::move(root);
+    });
+
+    return m_secretRoot;
+}
+
 HRESULT WSLCSession::BuildImage(const WSLCBuildImageOptions* Options, IProgressCallback* ProgressCallback, HANDLE CancelEvent)
 try
 {
@@ -1003,9 +1077,9 @@ try
 
     if (Options->Secrets.Count > 0)
     {
-        // Stable per-session root; its virtiofs share is created once and reused by every build.
-        auto secretRoot = wsl::windows::common::filesystem::GetTempFolderPath(GetCurrentProcessToken()) / L"wslc-secrets";
-        std::filesystem::create_directories(secretRoot);
+        // Stable per-session root (created and crash-reclaimed on first use); its virtiofs share is
+        // created once and reused by every build in this session.
+        const auto& secretRoot = EnsureSecretRoot();
 
         GUID dirId{};
         THROW_IF_FAILED(CoCreateGuid(&dirId));
