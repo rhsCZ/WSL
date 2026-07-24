@@ -23,7 +23,7 @@ namespace wsl::windows::wslc::services {
 struct BuildSecret
 {
     std::wstring Id;         // value for docker's --secret id= field
-    std::vector<BYTE> Value; // raw secret bytes (may contain NULs); materialized into a VM tmpfs file server-side
+    std::vector<BYTE> Value; // raw secret bytes (may contain NULs); materialized into a host-side temp file mounted read-only into the VM during build
 };
 
 class ImageService
