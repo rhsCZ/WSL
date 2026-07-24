@@ -104,10 +104,10 @@ void ValidateName(LPCSTR Name, size_t maxLength)
 }
 
 // Removes build-secret directories under Base that were left behind by crashed sessions. Each live
-// session holds an exclusive lock on its "<dir>\.lock" marker; a directory whose lock we can open
-// (owner gone) or that has no marker (partially created) is stale and removed. Best-effort: any error
-// simply leaves the directory for a later sweep. The caller must not have created its own directory
-// under Base yet, so this never removes the caller's in-use directory.
+// session holds an exclusive lock on its "<dir>\.lock" marker; a directory is removed only when its
+// marker exists and can be opened exclusively (owner gone). Directories with no marker are skipped to
+// avoid racing a session that is still initializing between creating its directory and its lock.
+// Best-effort: any error simply leaves the directory for a later sweep.
 void SweepStaleSecretDirs(const std::filesystem::path& Base)
 {
     std::error_code ec;
@@ -125,9 +125,11 @@ void SweepStaleSecretDirs(const std::filesystem::path& Base)
 
         const auto lockPath = entry.path() / L".lock";
         wil::unique_hfile probe(CreateFileW(lockPath.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
-        if (!probe && GetLastError() == ERROR_SHARING_VIOLATION)
+        if (!probe)
         {
-            // A live session still owns this directory - leave it alone.
+            // The marker could not be opened exclusively: either a live session still owns it (sharing
+            // violation) or the directory is still being initialized and has no marker yet. In both cases
+            // leave it alone to avoid racing a concurrent session; a later sweep reclaims it once stale.
             continue;
         }
 
