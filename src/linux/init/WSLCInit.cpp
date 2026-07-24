@@ -837,10 +837,7 @@ void HandleMessageImpl(
 }
 
 void HandleMessageImpl(
-    wsl::shared::SocketChannel& Channel,
-    wsl::shared::Transaction& Transaction,
-    const WSLC_MOUNT_VIRTIOFS& Message,
-    const gsl::span<gsl::byte>& Buffer)
+    wsl::shared::SocketChannel& Channel, wsl::shared::Transaction& Transaction, const WSLC_MOUNT_VIRTIOFS& Message, const gsl::span<gsl::byte>& Buffer)
 {
     HandleMountMessage(Channel, Transaction, Message, Buffer);
 }
