@@ -72,7 +72,7 @@ extends:
     stages:
     - template: build-stage.yml@self
       parameters:
-        isRelease: true
+        isRelease: false
         packageVersion: ${{ iif(eq(parameters.testVersion, ''), variables['Build.SourceBranchName'], parameters.testVersion) }}
         nugetSuffix: ${{ parameters.nugetSuffix }}
         traceLoggingConfig: $(ReleaseTraceLoggingConfig)
@@ -81,18 +81,18 @@ extends:
 
     - template: dcat-stage.yml@self
 
-    - template: test-stage.yml@self
-      parameters:
-        rs_prerelease_only: false
+    # - template: test-stage.yml@self
+    #   parameters:
+    #     rs_prerelease_only: false
 
-    - template: flight-stage.yml@self
-      parameters:
-        publishPackage: ${{ iif(eq(parameters.testVersion, ''), true, false) }}
-        packageVersion: ${{ iif(eq(parameters.testVersion, ''), variables['Build.SourceBranchName'], parameters.testVersion) }}
-        bypassTests: ${{ parameters.bypassTests }}
-        pushToStore: ${{ parameters.pushToStore }}
+    # - template: flight-stage.yml@self
+    #   parameters:
+    #     publishPackage: ${{ iif(eq(parameters.testVersion, ''), true, false) }}
+    #     packageVersion: ${{ iif(eq(parameters.testVersion, ''), variables['Build.SourceBranchName'], parameters.testVersion) }}
+    #     bypassTests: ${{ parameters.bypassTests }}
+    #     pushToStore: ${{ parameters.pushToStore }}
 
-    - ${{ if or(eq(parameters.testVersion, ''), not(eq(parameters.nugetSuffix, ''))) }}:
-        - template: nuget-stage.yml@self
-          parameters:
-            isNightly: false
+    # - ${{ if or(eq(parameters.testVersion, ''), not(eq(parameters.nugetSuffix, ''))) }}:
+    #     - template: nuget-stage.yml@self
+    #       parameters:
+    #         isNightly: false
