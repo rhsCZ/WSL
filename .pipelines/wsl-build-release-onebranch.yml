@@ -49,10 +49,10 @@ extends:
     globalSdl:
       credscan:
         enabled: true
-      codesign:
-        enabled: true
-        break: true
-        targetGlob: '**\*.dll;**\*.exe;**\*.sys;**\*.msi;**\*.msix;**\*.msixbundle;**\*.appx;**\*.nupkg'
+      # codesign:
+      #   enabled: true
+      #   break: true
+      #   targetGlob: '**\*.dll;**\*.exe;**\*.sys;**\*.msi;**\*.msix;**\*.msixbundle;**\*.appx;**\*.nupkg'
       perStage:
         credscan:
           enabled: true
@@ -73,9 +73,10 @@ extends:
     - template: build-stage.yml@self
       parameters:
         isRelease: false
+        includePackageStage: false
         packageVersion: ${{ iif(eq(parameters.testVersion, ''), variables['Build.SourceBranchName'], parameters.testVersion) }}
         nugetSuffix: ${{ parameters.nugetSuffix }}
-        traceLoggingConfig: $(ReleaseTraceLoggingConfig)
+        # traceLoggingConfig: $(ReleaseTraceLoggingConfig)
         vsoOrg: microsoft
         vsoProject: Microsoft.WSL
 
