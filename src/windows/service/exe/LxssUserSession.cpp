@@ -915,6 +915,7 @@ HRESULT LxssUserSessionImpl::MoveDistribution(_In_ LPCGUID DistroGuid, _In_ LPCW
     RETURN_HR_IF(WSL_E_DISTRO_NOT_STOPPED, m_runningInstances.contains(*DistroGuid));
 
     // Lookup the distribution configuration
+    const auto userToken = wsl::windows::common::security::GetUserToken(TokenImpersonation);
     const auto lxssKey = s_OpenLxssUserKey();
     _ValidateDistributionNameAndPathNotInUse(lxssKey.get(), Location, nullptr);
 
@@ -931,6 +932,14 @@ HRESULT LxssUserSessionImpl::MoveDistribution(_In_ LPCGUID DistroGuid, _In_ LPCW
     // Cross-volume MoveFileEx creates a new file using the impersonation token's
     // default owner. Normalize that owner to the caller's user SID so elevated moves
     // do not produce a VHD owned by BUILTIN\Administrators.
+    PSID originalVhdOwner = nullptr;
+    wil::unique_hlocal originalSecurityDescriptor;
+    {
+        auto impersonate = wil::impersonate_token(userToken.get());
+        THROW_IF_WIN32_ERROR(GetNamedSecurityInfoW(
+            distro.VhdFilePath.c_str(), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, &originalVhdOwner, nullptr, nullptr, nullptr, &originalSecurityDescriptor));
+    }
+
     auto tokenUser = wil::get_token_information<TOKEN_USER>(userToken.get());
     TOKEN_OWNER tokenOwner{tokenUser->User.Sid};
     THROW_IF_WIN32_BOOL_FALSE(SetTokenInformation(userToken.get(), TokenOwner, &tokenOwner, sizeof(tokenOwner)));
@@ -949,6 +958,9 @@ HRESULT LxssUserSessionImpl::MoveDistribution(_In_ LPCGUID DistroGuid, _In_ LPCW
     }
 
     auto revert = wil::scope_exit_log(WI_DIAGNOSTICS_INFO, [&]() {
+        TOKEN_OWNER originalOwner{originalVhdOwner};
+        LOG_IF_WIN32_BOOL_FALSE(SetTokenInformation(userToken.get(), TokenOwner, &originalOwner, sizeof(originalOwner)));
+
         auto impersonate = wil::impersonate_token(userToken.get());
         if (!MoveFileExW(destPath.c_str(), distro.VhdFilePath.c_str(), MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         {
