@@ -37,8 +37,6 @@ using namespace wsl::windows::wslc::services;
 
 namespace wsl::windows::wslc::task {
 
-constexpr uint32_t c_reclaimedSpacePrecision = 4;
-
 namespace {
 
     class DECLSPEC_UUID("91EF98A7-99A8-41C2-893C-43CDFB7DB69F") WSLCImageLoadCallback
@@ -72,9 +70,6 @@ namespace {
     private:
         Terminal& m_terminal;
     };
-
-    // Placeholder for values that are unavailable. wslc does not track image digests or layer sharing.
-    constexpr std::string_view c_notAvailable = "N/A";
 
     // Builds the representation of an image, shared by the table and json output so the two cannot
     // drift. Every value is emitted as a string, "<none>" is used for missing repository/tag data,
@@ -309,7 +304,14 @@ void DeleteImage(CLIExecutionContext& context)
     bool noPrune = context.Args.GetValue<ArgType::NoPrune>();
     for (const auto& id : imageIds)
     {
-        services::ImageService::Delete(session, WideToMultiByte(id), force, noPrune);
+        const auto deleted = services::ImageService::Delete(session, WideToMultiByte(id), force, noPrune);
+        for (const auto& entry : deleted)
+        {
+            context.Terminal.Output(
+                L"{}\n",
+                entry.Deleted ? Localization::WSLCCLI_ImageDeleteDeleted(entry.Image)
+                              : Localization::WSLCCLI_ImageDeleteUntagged(entry.Image));
+        }
     }
 }
 
@@ -428,17 +430,23 @@ void PruneImages(CLIExecutionContext& context)
 
     auto result = ImageService::Prune(session, all, filters);
 
-    for (const auto& image : result.UntaggedImages)
+    if (!result.UntaggedImages.empty() || !result.DeletedImages.empty())
     {
-        context.Terminal.Output(L"{}\n", Localization::WSLCCLI_ImagePruneUntagged(image));
+        context.Terminal.Output(L"{}\n", Localization::WSLCCLI_ImagePruneDeletedHeader());
+
+        for (const auto& image : result.UntaggedImages)
+        {
+            context.Terminal.Output(L"{}\n", Localization::WSLCCLI_ImagePruneUntagged(image));
+        }
+
+        for (const auto& image : result.DeletedImages)
+        {
+            context.Terminal.Output(L"{}\n", Localization::WSLCCLI_ImagePruneDeleted(image));
+        }
+
+        context.Terminal.Output(L"\n");
     }
 
-    for (const auto& image : result.DeletedImages)
-    {
-        context.Terminal.Output(L"{}\n", Localization::WSLCCLI_ImagePruneDeleted(image));
-    }
-
-    context.Terminal.Output(L"\n");
     context.Terminal.Output(
         L"{}\n", Localization::WSLCCLI_ImagePruneSpaceReclaimedBytes(FormatHumanReadableSize(result.SpaceReclaimed, c_reclaimedSpacePrecision)));
 }
