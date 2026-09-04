@@ -64,7 +64,7 @@ _(Follow,           "follow",               L"f",             Kind::Flag,       
 _(Timestamps,       "timestamps",           L"t",             Kind::Flag,       NoConversion, Localization::WSLCCLI_TimestampsArgDescription()) \
 _(Since,            "since",                NO_ALIAS,         Kind::Value,      LONGLONG,     Localization::WSLCCLI_SinceArgDescription()) \
 _(Until,            "until",                NO_ALIAS,         Kind::Value,      LONGLONG,     Localization::WSLCCLI_UntilArgDescription()) \
-_(Format,           "format",               NO_ALIAS,         Kind::Value,      FormatType,   Localization::WSLCCLI_FormatArgDescription()) \
+_(Format,           "format",               NO_ALIAS,         Kind::Value,      OutputFormat, Localization::WSLCCLI_FormatArgDescription()) \
 _(ForwardArgs,      "arguments",            NO_ALIAS,         Kind::Forward,    NoConversion, Localization::WSLCCLI_ForwardArgsDescription()) \
 _(Gateway,          "gateway",              NO_ALIAS,         Kind::Value,      NoConversion, Localization::WSLCCLI_NetworkGatewayArgDescription()) \
 _(Gpus,             "gpus",                 NO_ALIAS,         Kind::Value,      NoConversion, Localization::WSLCCLI_GpusArgDescription()) \

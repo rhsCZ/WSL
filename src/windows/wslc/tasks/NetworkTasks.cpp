@@ -206,10 +206,10 @@ void ListNetworks(CLIExecutionContext& context)
     // Networks are reported in name order regardless of how the daemon returns them.
     std::ranges::sort(networks, {}, &wslc_schema::NetworkListEntry::Name);
 
-    const auto format = context.Args.GetValue<ArgType::Format>(FormatType::Table);
+    const auto format = context.Args.GetValue<ArgType::Format>(models::OutputFormat{});
     const bool quiet = context.Args.GetValue<ArgType::Quiet>();
     const bool trunc = !context.Args.GetValue<ArgType::NoTrunc>();
-    if (format == FormatType::Table && quiet)
+    if (format.Type == FormatType::Table && quiet)
     {
         for (const auto& network : networks)
         {
@@ -219,13 +219,22 @@ void ListNetworks(CLIExecutionContext& context)
         return;
     }
 
-    switch (format)
+    switch (format.Type)
     {
     case FormatType::Json:
     {
         for (const auto& network : networks)
         {
             context.Terminal.Output(L"{}\n", ToJsonW(ToNetworkOutput(network, trunc), c_jsonCompactIndent));
+        }
+
+        break;
+    }
+    case FormatType::Template:
+    {
+        for (const auto& network : networks)
+        {
+            context.Terminal.Output(L"{}\n", format.Template.Render(nlohmann::json(ToNetworkOutput(network, trunc))));
         }
 
         break;

@@ -57,10 +57,9 @@ class WSLCE2EVolumeListTests
 
     WSLC_TEST_METHOD(WSLCE2E_Volume_List_InvalidFormatOption)
     {
-        auto result = RunWslc(L"volume list --format invalid");
+        auto result = RunWslc(L"volume list --format {{.ID");
         result.Verify({.Stdout = L"", .ExitCode = 1});
-        VERIFY_IS_TRUE(result.StderrContainsSubstring(
-            L"Invalid format value: invalid is not a recognized format type. Supported format types are: json, table."));
+        VERIFY_IS_TRUE(result.StderrContainsSubstring(L"Invalid format value: a template action is missing its closing braces."));
     }
 
     WSLC_TEST_METHOD(WSLCE2E_Volume_List_QuietOption_OutputsNamesOnly)

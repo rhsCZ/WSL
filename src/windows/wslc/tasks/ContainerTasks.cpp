@@ -576,16 +576,25 @@ void ListContainers(CLIExecutionContext& context)
         return;
     }
 
-    const auto format = context.Args.GetValue<ArgType::Format>(FormatType::Table);
+    const auto format = context.Args.GetValue<ArgType::Format>(models::OutputFormat{});
     bool trunc = !context.Args.GetValue<ArgType::NoTrunc>();
 
-    switch (format)
+    switch (format.Type)
     {
     case FormatType::Json:
     {
         for (const auto& container : containers)
         {
             context.Terminal.Output(L"{}\n", ToJsonW(ToContainerOutput(container, trunc, FormatType::Json), c_jsonCompactIndent));
+        }
+
+        break;
+    }
+    case FormatType::Template:
+    {
+        for (const auto& container : containers)
+        {
+            context.Terminal.Output(L"{}\n", format.Template.Render(nlohmann::json(ToContainerOutput(container, trunc, FormatType::Json))));
         }
 
         break;
@@ -970,15 +979,24 @@ void ShowContainerStats(CLIExecutionContext& context)
         10 // Batch Size - chosen to be around typical expected container use while protecting against extreme cases.
     );
 
-    const auto format = context.Args.GetValue<ArgType::Format>(FormatType::Table);
+    const auto format = context.Args.GetValue<ArgType::Format>(models::OutputFormat{});
 
-    switch (format)
+    switch (format.Type)
     {
     case FormatType::Json:
     {
         for (const auto& entry : statsJson)
         {
             context.Terminal.Output(L"{}\n", ToJsonW(entry, c_jsonCompactIndent));
+        }
+
+        break;
+    }
+    case FormatType::Template:
+    {
+        for (const auto& entry : statsJson)
+        {
+            context.Terminal.Output(L"{}\n", format.Template.Render(entry));
         }
 
         break;

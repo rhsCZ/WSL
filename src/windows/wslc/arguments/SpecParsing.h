@@ -89,8 +89,9 @@ WSLCSignal GetWSLCSignalFromString(const std::wstring& input, const std::wstring
 // Parses a timestamp given as Unix epoch seconds or an RFC3339 string into epoch seconds.
 LONGLONG GetTimestampFromString(const std::wstring& value, const std::wstring& argName = {});
 
-// Parses an output format ("json"/"table") into a FormatType.
-models::FormatType GetFormatTypeFromString(const std::wstring& input, const std::wstring& argName = {});
+// Parses an output format into its kind. "json" and "table" select the built-in layouts;
+// anything else is compiled as a template.
+models::OutputFormat GetOutputFormatFromString(const std::wstring& input, const std::wstring& argName = {});
 
 // Parses the inspect family's sole supported format ("json") into its compact json::dump() indent.
 int GetInspectJsonIndentFromString(const std::wstring& input, const std::wstring& argName = {});

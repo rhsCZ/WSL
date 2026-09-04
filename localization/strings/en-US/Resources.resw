@@ -3175,7 +3175,7 @@ On first run, creates the file with all settings commented out at their defaults
     <value>Follow log output</value>
   </data>
   <data name="WSLCCLI_FormatArgDescription" xml:space="preserve">
-    <value>Output formatting (json or table) (Default: table)</value>
+    <value>Output formatting (json, table, or a Go template) (Default: table)</value>
     <comment>{Locked="json"}{Locked="table"}Command line arguments should not be translated</comment>
   </data>
   <data name="WSLCCLI_InspectFormatArgDescription" xml:space="preserve">
@@ -3469,6 +3469,54 @@ On first run, creates the file with all settings commented out at their defaults
   </data>
   <data name="WSLCCLI_InvalidFormatValueError" xml:space="preserve">
     <value>Invalid {} value: {} is not a recognized format type. Supported format types are: {}.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateUnclosedActionError" xml:space="preserve">
+    <value>Invalid {} value: a template action is missing its closing braces.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateEmptyActionError" xml:space="preserve">
+    <value>Invalid {} value: a template action is empty.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateUnterminatedStringError" xml:space="preserve">
+    <value>Invalid {} value: a template string literal is missing its closing quote.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateVariablesUnsupportedError" xml:space="preserve">
+    <value>Invalid {} value: template variables are not supported.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateUnexpectedTokenError" xml:space="preserve">
+    <value>Invalid {} value: unexpected {} in a template action.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateUnknownFunctionError" xml:space="preserve">
+    <value>Invalid {} value: {} is not a supported template function.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateArgumentCountError" xml:space="preserve">
+    <value>Invalid {} value: the {} template function was given the wrong number of arguments.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateMissingEndError" xml:space="preserve">
+    <value>Invalid {} value: a conditional template action is missing its matching end action.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateUnexpectedKeywordError" xml:space="preserve">
+    <value>Invalid {} value: the template keyword {} has no matching if action.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateUnsupportedKeywordError" xml:space="preserve">
+    <value>Invalid {} value: the template keyword {} is not supported.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateUnknownFieldError" xml:space="preserve">
+    <value>The template field {} is not available on this object.</value>
+    <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
+  </data>
+  <data name="WSLCCLI_TemplateFunctionArgumentTypeError" xml:space="preserve">
+    <value>The {} template function received a value of an unsupported type.</value>
     <comment>{FixedPlaceholder="{}"}Command line arguments, file names and string inserts should not be translated</comment>
   </data>
   <data name="WSLCCLI_InvalidPullPolicyError" xml:space="preserve">

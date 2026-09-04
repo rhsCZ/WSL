@@ -107,9 +107,12 @@ void ShowSystemInfo(CLIExecutionContext& context)
     const auto windowsVersion = wsl::windows::common::helpers::GetWindowsVersionString();
     const auto settingsFilePath = settings::User().SettingsFilePath().wstring();
 
-    switch (context.Args.GetValue<ArgType::Format>(FormatType::Table))
+    const auto format = context.Args.GetValue<ArgType::Format>(models::OutputFormat{});
+
+    switch (format.Type)
     {
     case FormatType::Json:
+    case FormatType::Template:
     {
         // A JSON document can't be emitted partially, so an unreachable service fails the whole command.
         const auto managerVersionText = FormatManagerVersion(SessionService::ManagerVersion());
@@ -142,7 +145,15 @@ void ShowSystemInfo(CLIExecutionContext& context)
             sessionArray.push_back({{"ID", session.SessionId}, {"CreatorPid", session.CreatorPid}, {"Name", session.DisplayName}});
         }
 
-        context.Terminal.Output(L"{}\n", ToJsonW(root, c_jsonCompactIndent));
+        if (format.Type == FormatType::Template)
+        {
+            context.Terminal.Output(L"{}\n", format.Template.Render(root));
+        }
+        else
+        {
+            context.Terminal.Output(L"{}\n", ToJsonW(root, c_jsonCompactIndent));
+        }
+
         break;
     }
     case FormatType::Table:

@@ -189,10 +189,15 @@ class WSLCE2EContainerListTests
 
     WSLC_TEST_METHOD(WSLCE2E_Container_List_InvalidFormatOption)
     {
-        const auto result = RunWslc(L"container list --format invalid");
+        const auto result = RunWslc(L"container list --format {{.ID");
         result.Verify({.Stdout = L"", .ExitCode = 1});
-        VERIFY_IS_TRUE(result.StderrContainsSubstring(
-            L"Invalid format value: invalid is not a recognized format type. Supported format types are: json, table."));
+        VERIFY_IS_TRUE(result.StderrContainsSubstring(L"Invalid format value: a template action is missing its closing braces."));
+    }
+
+    WSLC_TEST_METHOD(WSLCE2E_Container_List_TemplateFormat)
+    {
+        const auto result = RunWslc(L"container list --all --format {{.ID}}");
+        result.Verify({.Stderr = L"", .ExitCode = 0});
     }
 
     WSLC_TEST_METHOD(WSLCE2E_Container_List_JsonFormat)

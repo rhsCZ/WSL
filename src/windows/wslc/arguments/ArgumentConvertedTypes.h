@@ -39,7 +39,7 @@ namespace mount = wsl::windows::common::mount;
 // Local aliases so the ConvertedType tokens in the WSLC_ARGUMENTS X-macro (ArgumentDefinitions.h)
 // resolve here regardless of include order. Aggregate converted types must be aliased because their
 // commas would otherwise break X-macro argument parsing if written inline in the table.
-using FormatType = wsl::windows::wslc::models::FormatType;
+using OutputFormat = wsl::windows::wslc::models::OutputFormat;
 using InspectType = wsl::windows::wslc::models::InspectType;
 using JsonIndent = int;
 using ProgressMode = wsl::windows::wslc::models::ProgressMode;

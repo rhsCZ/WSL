@@ -15,6 +15,7 @@ Abstract:
 #pragma once
 
 #include "MountSpecParsing.h"
+#include "OutputTemplate.h"
 #include <wslservice.h>
 #include <wslc.h>
 #include <optional>
@@ -30,6 +31,15 @@ enum class FormatType
 {
     Table,
     Json,
+    Template,
+};
+
+// A parsed --format value. Template is the only kind that carries additional state, so the
+// compiled template is empty for the others.
+struct OutputFormat
+{
+    FormatType Type = FormatType::Table;
+    OutputTemplate Template;
 };
 
 struct ContainerNetwork

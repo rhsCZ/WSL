@@ -117,10 +117,9 @@ class WSLCE2EImageListTests
 
     WSLC_TEST_METHOD(WSLCE2E_Image_List_InvalidFormatOption)
     {
-        const auto result = RunWslc(L"image list --format invalid");
+        const auto result = RunWslc(L"image list --format {{.ID");
         result.Verify({.Stdout = L"", .ExitCode = 1});
-        VERIFY_IS_TRUE(result.StderrContainsSubstring(
-            L"Invalid format value: invalid is not a recognized format type. Supported format types are: json, table."));
+        VERIFY_IS_TRUE(result.StderrContainsSubstring(L"Invalid format value: a template action is missing its closing braces."));
     }
 
     WSLC_TEST_METHOD(WSLCE2E_Image_List_JsonFormat)

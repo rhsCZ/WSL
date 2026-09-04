@@ -178,13 +178,15 @@ class WSLCCLIArgumentUnitTests
         VERIFY_THROWS(validation::ValidateWSLCSignalFromString({L"SIGHUP", L"999"}, L"signalArg"), ArgumentException); // 999 is out of range
 
         // Verify format type
-        auto format = validation::GetFormatTypeFromString(L"json");
-        VERIFY_ARE_EQUAL(format, FormatType::Json);
-        format = validation::GetFormatTypeFromString(L"table");
-        VERIFY_ARE_EQUAL(format, FormatType::Table);
-        VERIFY_THROWS(validation::GetFormatTypeFromString(L"xml"), ArgumentException);
-        VERIFY_NO_THROW(validation::ValidateFormatTypeFromString({L"json", L"table"}, L"formatArg"));
-        VERIFY_THROWS(validation::ValidateFormatTypeFromString({L"JSON", L"TABLE", L"csv"}, L"formatArg"), ArgumentException);
+        auto format = validation::GetOutputFormatFromString(L"json");
+        VERIFY_ARE_EQUAL(format.Type, FormatType::Json);
+        format = validation::GetOutputFormatFromString(L"table");
+        VERIFY_ARE_EQUAL(format.Type, FormatType::Table);
+        format = validation::GetOutputFormatFromString(L"xml");
+        VERIFY_ARE_EQUAL(format.Type, FormatType::Template);
+        VERIFY_THROWS(validation::GetOutputFormatFromString(L"{{.Id"), ArgumentException);
+        VERIFY_NO_THROW(validation::ValidateOutputFormat({L"json", L"table", L"{{.Id}}"}, L"formatArg"));
+        VERIFY_THROWS(validation::ValidateOutputFormat({L"json", L"{{range .}}"}, L"formatArg"), ArgumentException);
 
         // Verify image pull policy
         auto pullPolicy = validation::GetPullPolicyFromString(L"always");
@@ -392,8 +394,8 @@ class WSLCCLIArgumentUnitTests
     // re-converting. This drives the real validation + caching path for each converted ArgType.
     TEST_METHOD(ArgumentValidate_ConvertsAndCachesEveryConvertedArgType)
     {
-        // string -> FormatType
-        VERIFY_ARE_EQUAL(ValidateAndGetCached<ArgType::Format>(L"json"), FormatType::Json);
+        // string -> OutputFormat
+        VERIFY_ARE_EQUAL(ValidateAndGetCached<ArgType::Format>(L"json").Type, FormatType::Json);
 
         // string -> json::dump() indentation
         VERIFY_ARE_EQUAL(ValidateAndGetCached<ArgType::InspectFormat>(L"json"), wsl::shared::c_jsonCompactIndent);
@@ -606,7 +608,7 @@ class WSLCCLIArgumentUnitTests
     TEST_METHOD(ArgumentValidate_InvalidValueThrowsAndCachesNothing)
     {
         ArgMap args;
-        args.Add(ArgType::Format, std::wstring(L"xml"));
+        args.Add(ArgType::Format, std::wstring(L"{{.Id"));
         VERIFY_THROWS(Argument::Create(ArgType::Format).Validate(args), ArgumentException);
         VERIFY_IS_FALSE(args.ContainsValidated(ArgType::Format));
     }
@@ -626,7 +628,7 @@ class WSLCCLIArgumentUnitTests
     TEST_METHOD(ArgumentValidate_OnDemandInvalidValueThrows)
     {
         ArgMap args;
-        args.Add(ArgType::Format, std::wstring(L"xml")); // not a valid FormatType
+        args.Add(ArgType::Format, std::wstring(L"{{.Id")); // an unclosed template action
         VERIFY_IS_FALSE(args.ContainsValidated(ArgType::Format));
         VERIFY_THROWS(args.GetValue<ArgType::Format>(), ArgumentException);
         VERIFY_IS_FALSE(args.ContainsValidated(ArgType::Format));

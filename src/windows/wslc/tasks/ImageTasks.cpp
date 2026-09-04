@@ -179,10 +179,11 @@ void GetImages(CLIExecutionContext& context)
     // Filter values are parsed and cached during argument validation.
     auto filters = context.Args.GetAllValues<ArgType::Filter>();
 
-    // The container count is only reported by json output, and gathering it costs an extra query in
-    // the service, so it is only requested when it will be shown.
-    const bool containerCounts =
-        context.Args.GetValue<ArgType::Format>(FormatType::Table) == FormatType::Json && !context.Args.GetValue<ArgType::Quiet>();
+    // The container count is only reported by json and template output, and gathering it costs an
+    // extra query in the service, so it is only requested when it will be shown.
+    const auto requestedFormat = context.Args.GetValue<ArgType::Format>(models::OutputFormat{}).Type;
+    const bool containerCounts = (requestedFormat == FormatType::Json || requestedFormat == FormatType::Template) &&
+                                 !context.Args.GetValue<ArgType::Quiet>();
 
     auto images = ImageService::List(session, filters, containerCounts);
     context.Data.Add<Data::Images>(std::move(images));
@@ -204,16 +205,25 @@ void ListImages(CLIExecutionContext& context)
         return;
     }
 
-    const auto format = context.Args.GetValue<ArgType::Format>(FormatType::Table);
+    const auto format = context.Args.GetValue<ArgType::Format>(models::OutputFormat{});
     bool trunc = !context.Args.GetValue<ArgType::NoTrunc>();
 
-    switch (format)
+    switch (format.Type)
     {
     case FormatType::Json:
     {
         for (const auto& image : images)
         {
             context.Terminal.Output(L"{}\n", ToJsonW(ToImageOutput(image, trunc), c_jsonCompactIndent));
+        }
+
+        break;
+    }
+    case FormatType::Template:
+    {
+        for (const auto& image : images)
+        {
+            context.Terminal.Output(L"{}\n", format.Template.Render(nlohmann::json(ToImageOutput(image, trunc))));
         }
 
         break;

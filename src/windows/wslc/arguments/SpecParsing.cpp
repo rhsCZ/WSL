@@ -626,35 +626,44 @@ LONGLONG GetTimestampFromString(const std::wstring& value, const std::wstring& a
     }
 }
 
-models::FormatType GetFormatTypeFromString(const std::wstring& input, const std::wstring& argName)
+models::OutputFormat GetOutputFormatFromString(const std::wstring& input, const std::wstring& argName)
 {
-    // Single source of truth for the accepted format values. It drives both parsing and the error
-    // message's supported-values list, so adding a type here updates both automatically.
+    // Single source of truth for the keyword format values. Any other value is a template.
     static constexpr std::pair<std::wstring_view, models::FormatType> c_formatTypes[] = {
         {L"json", models::FormatType::Json},
         {L"table", models::FormatType::Table},
     };
 
+    // An explicitly empty value selects the default layout.
+    if (input.empty())
+    {
+        return {};
+    }
+
     for (const auto& [name, type] : c_formatTypes)
     {
         if (IsEqual(input, name))
         {
-            return type;
+            return {.Type = type};
         }
     }
 
-    std::wstring supportedValues;
-    for (const auto& formatType : c_formatTypes)
+    // Shells on Windows do not expand escape sequences inside a quoted argument, so the two
+    // character forms are turned into the whitespace they name before the template is compiled.
+    std::wstring text;
+    text.reserve(input.size());
+    for (size_t index = 0; index < input.size(); ++index)
     {
-        if (!supportedValues.empty())
+        if (input[index] == L'\\' && index + 1 < input.size() && (input[index + 1] == L't' || input[index + 1] == L'n'))
         {
-            supportedValues += L", ";
+            text += input[++index] == L't' ? L'\t' : L'\n';
+            continue;
         }
 
-        supportedValues += formatType.first;
+        text += input[index];
     }
 
-    throw ArgumentException(Localization::WSLCCLI_InvalidFormatValueError(argName, input, supportedValues));
+    return {.Type = models::FormatType::Template, .Template = OutputTemplate::Parse(text, argName)};
 }
 
 int GetInspectJsonIndentFromString(const std::wstring& input, const std::wstring& argName)

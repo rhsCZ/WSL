@@ -95,7 +95,7 @@ void Argument::Validate(ArgMap& execArgs) const
         break;
 
     case ArgType::Format:
-        CacheConverted<ArgType::Format>(execArgs, m_name, validation::GetFormatTypeFromString);
+        CacheConverted<ArgType::Format>(execArgs, m_name, validation::GetOutputFormatFromString);
         break;
 
     case ArgType::InspectFormat:
@@ -370,11 +370,11 @@ void ValidateTimestamp(const std::vector<std::wstring>& values, const std::wstri
     }
 }
 
-void ValidateFormatTypeFromString(const std::vector<std::wstring>& values, const std::wstring& argName)
+void ValidateOutputFormat(const std::vector<std::wstring>& values, const std::wstring& argName)
 {
     for (const auto& value : values)
     {
-        std::ignore = GetFormatTypeFromString(value, argName);
+        std::ignore = GetOutputFormatFromString(value, argName);
     }
 }
 

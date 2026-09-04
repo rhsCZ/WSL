@@ -219,10 +219,9 @@ class WSLCE2EGlobalTests
 
     WSLC_TEST_METHOD(WSLCE2E_SystemInfoCommand_InvalidFormatOption)
     {
-        const auto result = RunWslc(L"system info --format invalid");
+        const auto result = RunWslc(L"system info --format {{.ID");
         result.Verify({.Stdout = L"", .ExitCode = 1});
-        VERIFY_IS_TRUE(result.StderrContainsSubstring(
-            L"Invalid format value: invalid is not a recognized format type. Supported format types are: json, table."));
+        VERIFY_IS_TRUE(result.StderrContainsSubstring(L"Invalid format value: a template action is missing its closing braces."));
     }
 
     WSLC_TEST_METHOD(WSLCE2E_SystemInfoCommand_FormatJson)

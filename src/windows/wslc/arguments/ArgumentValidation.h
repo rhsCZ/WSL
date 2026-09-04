@@ -74,7 +74,7 @@ void ValidateNanoCpus(const std::vector<std::wstring>& values, const std::wstrin
 
 void ValidateUlimit(const std::vector<std::wstring>& values, const std::wstring& argName);
 
-void ValidateFormatTypeFromString(const std::vector<std::wstring>& values, const std::wstring& argName);
+void ValidateOutputFormat(const std::vector<std::wstring>& values, const std::wstring& argName);
 
 void ValidateGpus(const std::vector<std::wstring>& values, const std::wstring& argName);
 

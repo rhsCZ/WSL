@@ -202,15 +202,24 @@ void ListVolumes(CLIExecutionContext& context)
         return;
     }
 
-    const auto format = context.Args.GetValue<ArgType::Format>(FormatType::Table);
+    const auto format = context.Args.GetValue<ArgType::Format>(models::OutputFormat{});
 
-    switch (format)
+    switch (format.Type)
     {
     case FormatType::Json:
     {
         for (const auto& volume : volumes)
         {
             context.Terminal.Output(L"{}\n", ToJsonW(ToVolumeOutput(volume), c_jsonCompactIndent));
+        }
+
+        break;
+    }
+    case FormatType::Template:
+    {
+        for (const auto& volume : volumes)
+        {
+            context.Terminal.Output(L"{}\n", format.Template.Render(nlohmann::json(ToVolumeOutput(volume))));
         }
 
         break;
