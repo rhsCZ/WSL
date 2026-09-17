@@ -15,7 +15,6 @@ tmp
 *.lib
 *.dll
 obj/
-/src/windows/wslopenvmm/target/
 Debug/
 Release/
 Properties/
@@ -81,4 +80,3 @@ test-results.txt
 testfile.txt
 output/
 tools/benchmarking/benchmark-results/
-build/
