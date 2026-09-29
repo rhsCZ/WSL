@@ -369,9 +369,9 @@ HcsVirtualMachine::~HcsVirtualMachine()
     // on in-flight HCS exit/crash callbacks, which may themselves need m_lock. OnExit() is lock-free,
     // and closing the compute system drains all callbacks, so the rest of teardown needs no lock.
 
-    // Wait up to 5 seconds for the VM to terminate gracefully.
+    // Wait up to 30 seconds for the VM to terminate gracefully.
     bool forceTerminate = false;
-    if (!m_vmExitEvent.wait(5000))
+    if (!m_vmExitEvent.wait(30000))
     {
         forceTerminate = true;
         try
@@ -646,8 +646,9 @@ try
     }
     else
     {
-        std::wstring options = ReadOnly ? L"ro" : L"";
-
+        // N.B. The 'metadata' option is required so the virtiofs device host persists per-file
+        //      uid/gid in NTFS extended attributes. Without it, all files appear as root-owned.
+        std::wstring options = ReadOnly ? L"ro;metadata" : L"metadata";
         if (!m_virtioFsDevice.has_value())
         {
             VirtioFsShareOptions aggregateOptions{.Kind = VirtiofsShareKind_Aggregate};
