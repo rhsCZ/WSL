@@ -10,6 +10,7 @@ WslcInitProcessSettings
 
 WslcCreateSession
 WslcCreateContainer
+WslcOpenContainer
 
 WslcReleaseSession
 WslcReleaseContainer
@@ -52,6 +53,7 @@ WslcSetContainerSettingsPortMappings
 
 WslcCreateContainerProcess
 WslcStartContainer
+WslcSetContainerInitProcessIOCallbacks
 WslcInspectContainer
 WslcGetContainerState
 WslcStopContainer
@@ -63,6 +65,7 @@ WslcSetProcessSettingsCallbacks
 WslcSetProcessSettingsWorkingDirectory
 WslcSetProcessSettingsCmdLine
 WslcSetProcessSettingsEnvVariables
+WslcSetProcessSettingsFlags
 WslcGetProcessPid
 WslcGetProcessExitEvent
 WslcGetProcessState

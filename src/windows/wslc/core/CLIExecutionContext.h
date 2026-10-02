@@ -12,12 +12,14 @@ Abstract:
 
 --*/
 #pragma once
-#include "ArgumentTypes.h"
+#include "ArgMap.h"
 #include "ExecutionContextData.h"
-#include "Reporter.h"
+#include "Terminal.h"
 #include <optional>
 
 namespace wsl::windows::wslc::execution {
+
+using namespace wsl::windows::wslc::cli;
 
 struct CLIExecutionContext : public wsl::windows::common::ExecutionContext
 {
@@ -29,18 +31,14 @@ struct CLIExecutionContext : public wsl::windows::common::ExecutionContext
     NON_COPYABLE(CLIExecutionContext);
     NON_MOVABLE(CLIExecutionContext);
 
-    // Per-subcommand arguments parsed by the resolved leaf Command.
+    // Arguments accumulated from the selected command path.
     argument::ArgMap Args;
-
-    // Global options parsed from tokens that appear before any subcommand
-    // (e.g. `wslc <global-option> image list`). Populated early in CoreMain.
-    argument::ArgMap GlobalArgs;
 
     // Map of data stored in the context.
     DataMap Data;
 
-    // Central output reporter for all user-facing status messages.
-    Reporter Reporter;
+    // Central output terminal for all user-facing status messages.
+    Terminal Terminal;
 
     // Process exit code set by tasks like Run/Exec.
     std::optional<int> ExitCode;
@@ -50,9 +48,18 @@ struct CLIExecutionContext : public wsl::windows::common::ExecutionContext
 
     HANDLE CreateCancelEvent();
 
-    // Single chokepoint that turns parsed GlobalArgs into process-wide effects
-    // (debug logging, VT color, ...). Idempotent.
-    void ApplyGlobalOptions();
+    // Applies terminal configuration from parsed arguments and freezes those values for the invocation.
+    void ApplyTerminalOptions();
+
+    // Prints a caught error to stderr.
+    void ReportError(HRESULT result);
+
+    // Drops the collected error so a later failure in the same invocation reports its own message.
+    void ClearError();
+
+protected:
+    // Writes in-process warnings to the terminal, matching those raised through WarningCallback.
+    bool CollectUserWarning(const std::wstring& warning) override;
 };
 
 } // namespace wsl::windows::wslc::execution

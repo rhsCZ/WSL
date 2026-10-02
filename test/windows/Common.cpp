@@ -17,6 +17,7 @@ Abstract:
 #include "precomp.h"
 #include "Common.h"
 #include "LxssDynamicFunction.h"
+#include "WslCoreNetworkEndpointSettings.h"
 #include <tlhelp32.h>
 #include <werapi.h>
 #include <Dbghelp.h>
@@ -65,7 +66,7 @@ static std::wstring g_originalDefaultDistro;
 std::wstring g_dumpFolder;
 std::optional<std::wstring> g_dumpToolPath;
 static bool g_enableWerReport = false;
-static std::wstring g_pipelineBuildId;
+std::wstring g_pipelineBuildId;
 std::wstring g_testDistroPath;
 std::wstring g_testDataPath;
 bool g_fastTestRun = false; // True when test.bat was invoked with -f
@@ -1157,7 +1158,7 @@ Return Value:
 
 // WslKeepAlive class definitions
 
-WslKeepAlive::WslKeepAlive(HANDLE Token) : m_token(Token)
+WslKeepAlive::WslKeepAlive(HANDLE Token, const std::wstring& DistroName) : m_token(Token), m_distroName(DistroName)
 {
     Set();
 }
@@ -1190,7 +1191,8 @@ void WslKeepAlive::Run()
 
         // Start a process that outputs 'running', then waits
         const std::wstring expectedOutput = L"running";
-        std::wstring cmd = L"wsl.exe echo -n " + expectedOutput + L" && read -n 1 ";
+        const auto distroArgument = m_distroName.empty() ? L"" : std::format(L"-d {} ", m_distroName);
+        std::wstring cmd = L"wsl.exe " + distroArgument + L"echo -n " + expectedOutput + L" && read -n 1 ";
         const auto process = LxsstuStartProcess(cmd.data(), m_read.get(), write.get(), nullptr, m_token);
         write.reset();
 
@@ -1236,7 +1238,7 @@ std::pair<DWORD, DWORD> GetServiceState(SC_HANDLE service)
     return std::make_pair(status.dwCurrentState, status.dwProcessId);
 }
 
-void WaitForServiceState(SC_HANDLE service, DWORD state, DWORD previousPid)
+bool WaitForServiceState(SC_HANDLE service, DWORD state, DWORD previousPid)
 {
     DWORD currentState{};
     DWORD pid{};
@@ -1260,6 +1262,8 @@ void WaitForServiceState(SC_HANDLE service, DWORD state, DWORD previousPid)
     {
         LogError("Timed waiting for service to reach state: %lu. Current state: %lu, error: 0x%x", state, currentState, wil::ResultFromCaughtException());
     }
+
+    return currentState == state;
 }
 
 void StopService(SC_HANDLE service)
@@ -1316,6 +1320,8 @@ Return Value:
     {
         VERIFY_ARE_EQUAL(GetLastError(), ERROR_SERVICE_ALREADY_RUNNING);
     }
+
+    VERIFY_IS_TRUE(WaitForServiceState(service.get(), SERVICE_RUNNING, 0));
 }
 
 void StopWslService()
@@ -1459,9 +1465,9 @@ std::wstring LxssWriteWslConfig(const std::wstring& Content)
 }
 
 // writes distro specific settings /etc/wsl.conf
-std::string LxssWriteWslDistroConfig(const std::string& Content)
+std::string LxssWriteWslDistroConfig(const std::string& Content, LPCWSTR DistributionName)
 {
-    std::string path = std::format("\\\\wsl.localhost\\{}\\etc\\wsl.conf", LXSS_DISTRO_NAME_TEST);
+    std::string path = std::format("\\\\wsl.localhost\\{}\\etc\\wsl.conf", DistributionName);
 
     std::ifstream distroConfigRead(path);
     auto previousContent = std::string{std::istreambuf_iterator<char>(distroConfigRead), {}};
@@ -1537,6 +1543,7 @@ std::wstring LxssGenerateTestConfig(TestConfigDefaults Default)
         L"\n"
         L"mountDeviceTimeout=120000\n"
         L"kernelBootTimeout=120000\n"
+        L"distributionStartTimeout=120000\n"
         L"debugConsoleLogFile=" +
         EscapePath(Default.debugConsoleLogFile.value_or(kernelLogs)) +
         L"\n"
@@ -1644,8 +1651,20 @@ std::wstring LxssGenerateTestConfig(TestConfigDefaults Default)
         newConfig += L"[wsl2]\n";
     }
 
+    if (Default.virtioFsAggregateShares.has_value())
+    {
+        newConfig += L"\n[experimental]\n";
+        newConfig += boolOptionToString(L"virtioFsAggregateShares", Default.virtioFsAggregateShares, true);
+        newConfig += L"[wsl2]\n";
+    }
+
     // TODO: Remove once SetVersion() truncated archive error is root caused.
     newConfig += L"\n[experimental]\nSetVersionDebug=true\n[wsl2]\n";
+
+    if (Default.isolateDistroCgroup.has_value())
+    {
+        newConfig += boolOptionToString(L"isolateDistroCgroup", Default.isolateDistroCgroup, true);
+    }
 
     return newConfig;
 }
@@ -2501,6 +2520,72 @@ void TerminateDistribution(LPCWSTR DistributionName)
     VERIFY_ARE_EQUAL(0u, LxsstuLaunchWsl(std::format(L"{} {}", WSL_TERMINATE_ARG, DistributionName)));
 }
 
+void VerifyNoVmAccessToVhd(LPCWSTR VhdPath)
+{
+    PACL dacl{};
+    wil::unique_hlocal descriptor;
+    THROW_IF_WIN32_ERROR(GetNamedSecurityInfoW(VhdPath, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &dacl, nullptr, &descriptor));
+
+    VERIFY_IS_NOT_NULL(dacl);
+
+    // VM-specific ACEs must be removed when the VHD is detached.
+    constexpr auto c_virtualMachineSidPrefix = L"S-1-5-83-1-";
+    for (DWORD index = 0; index < dacl->AceCount; ++index)
+    {
+        void* ace{};
+        THROW_IF_WIN32_BOOL_FALSE(GetAce(dacl, index, &ace));
+        auto* allowed = static_cast<ACCESS_ALLOWED_ACE*>(ace);
+        VERIFY_ARE_EQUAL(ACCESS_ALLOWED_ACE_TYPE, allowed->Header.AceType);
+
+        wil::unique_hlocal_string sid;
+        THROW_IF_WIN32_BOOL_FALSE(ConvertSidToStringSidW(&allowed->SidStart, &sid));
+        VERIFY_IS_FALSE(std::wstring_view(sid.get()).starts_with(c_virtualMachineSidPrefix));
+    }
+}
+
+std::wstring GetBlockDeviceInWsl(ULONGLONG SizeBytes)
+{
+    // Wait for the disk to be attached.
+    const auto timeout = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    const auto expectedSize = std::to_wstring(SizeBytes);
+
+    bool done = false;
+    while (true)
+    {
+        for (wchar_t name = 'a'; name < 'z'; name++)
+        {
+            std::wstring cmd = L"-u root blockdev --getsize64 /dev/sd";
+            cmd += name;
+
+            std::wstring out;
+            try
+            {
+                out = LxsstuLaunchWslAndCaptureOutput(cmd.data()).first;
+            }
+            CATCH_LOG()
+
+            Trim(out);
+
+            if (out == expectedSize)
+            {
+                return std::wstring(L"/dev/sd") + name;
+            }
+        }
+
+        if (done)
+        {
+            break;
+        }
+
+        done = std::chrono::steady_clock::now() > timeout;
+    }
+
+    VERIFY_FAIL(L"Failed to find the block device in WSL");
+
+    // Unreachable.
+    return {};
+}
+
 void ValidateOutput(LPCWSTR CommandLine, const std::wstring& ExpectedOutput, const std::wstring& ExpectedWarnings, int ExitCode)
 {
     auto [output, warnings] = LxsstuLaunchWslAndCaptureOutput(CommandLine, ExitCode);
@@ -2555,7 +2640,7 @@ void ScopedEnvVariable::Clear()
     VERIFY_IS_TRUE(SetEnvironmentVariableW(m_name.c_str(), nullptr));
 }
 
-UniqueWebServer::UniqueWebServer(LPCWSTR Endpoint, LPCWSTR Content)
+UniqueWebServer::UniqueWebServer(LPCWSTR Endpoint, LPCWSTR Content, UINT StatusCode)
 {
     auto cmd = std::format(
         LR"(Powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
@@ -2566,12 +2651,13 @@ $server.Start()
 while ($true)
 {{
     $context = $server.GetContext()
-    $context.Response.StatusCode
+    $context.Response.StatusCode = {}
     $content = [Text.Encoding]::UTF8.GetBytes('{}')
     $context.Response.OutputStream.Write($content , 0, $content.length)
     $context.Response.close()
 }}")",
         Endpoint,
+        StatusCode,
         Content);
 
     m_process = LxsstuStartProcess(cmd.data());
@@ -2794,6 +2880,11 @@ PartialHandleRead::PartialHandleRead(HANDLE Handle) : m_handle(Handle)
 
 PartialHandleRead::~PartialHandleRead()
 {
+    Stop();
+}
+
+void PartialHandleRead::Stop()
+{
     m_exitEvent.SetEvent();
     if (m_thread.joinable())
     {
@@ -2936,7 +3027,7 @@ private:
     std::string m_targetValue;
 };
 
-void WaitForOutput(wil::unique_handle handle, std::string_view targetValue, std::chrono::milliseconds timeout)
+void WaitForOutput(wsl::windows::common::io::HandleWrapper handle, std::string_view targetValue, std::chrono::milliseconds timeout)
 {
     wsl::windows::common::io::MultiHandleWait io;
     io.AddHandle(std::make_unique<ReadHandleWithTargetValue>(std::move(handle), targetValue));
@@ -2967,6 +3058,10 @@ std::filesystem::path GetTestImagePath(std::string_view imageName)
     {
         result /= L"wslc-registry.tar";
     }
+    else if (imageName == "docker/dockerfile:1")
+    {
+        result /= L"dockerfile-frontend.tar";
+    }
     else
     {
         THROW_HR_MSG(E_INVALIDARG, "Unknown test image: %hs", imageName.data());
@@ -2985,7 +3080,7 @@ void LoadTestImage(IWSLCSession& session, std::string_view imageName)
     LARGE_INTEGER fileSize{};
     THROW_LAST_ERROR_IF(!GetFileSizeEx(imageFile.get(), &fileSize));
 
-    THROW_IF_FAILED(session.LoadImage(wsl::windows::common::wslutil::ToCOMInputHandle(imageFile.get()), nullptr, fileSize.QuadPart, nullptr));
+    THROW_IF_FAILED(session.LoadImage(wsl::windows::common::wslutil::ToCOMInputHandle(imageFile.get()), fileSize.QuadPart, nullptr, nullptr));
 }
 
 void ExpectHttpResponse(LPCWSTR Url, std::optional<int> expectedCode, bool retry)
@@ -3041,53 +3136,15 @@ void ExpectHttpResponse(LPCWSTR Url, std::optional<int> expectedCode, bool retry
     }
 }
 
-std::optional<std::string> GetHostAdapterIpv4()
+std::optional<std::wstring> GetHostAdapterIpv4()
 {
-    ULONG bufferSize = 0;
-    constexpr ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
-    auto result = GetAdaptersAddresses(AF_INET, flags, nullptr, nullptr, &bufferSize);
-    if (result != ERROR_BUFFER_OVERFLOW)
+    auto endpoint = wsl::core::networking::GetHostEndpointSettings();
+    if (!endpoint || endpoint->PreferredIpAddress.AddressString.empty())
     {
-        return std::nullopt;
+        return {};
     }
 
-    std::vector<BYTE> buffer(bufferSize);
-    auto* adapters = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
-    result = GetAdaptersAddresses(AF_INET, flags, nullptr, adapters, &bufferSize);
-    if (result != ERROR_SUCCESS)
-    {
-        return std::nullopt;
-    }
-
-    for (auto* adapter = adapters; adapter != nullptr; adapter = adapter->Next)
-    {
-        if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK || adapter->IfType == IF_TYPE_TUNNEL)
-        {
-            continue;
-        }
-
-        for (auto* addr = adapter->FirstUnicastAddress; addr != nullptr; addr = addr->Next)
-        {
-            if (addr->Address.lpSockaddr->sa_family != AF_INET)
-            {
-                continue;
-            }
-
-            auto& ipv4 = reinterpret_cast<sockaddr_in*>(addr->Address.lpSockaddr)->sin_addr;
-
-            // Skip APIPA (169.254.x.x) addresses.
-            if ((ntohl(ipv4.s_addr) & 0xFFFF0000) == 0xA9FE0000)
-            {
-                continue;
-            }
-
-            char buf[INET_ADDRSTRLEN];
-            VERIFY_IS_NOT_NULL(inet_ntop(AF_INET, &ipv4, buf, sizeof(buf)));
-            return std::string(buf);
-        }
-    }
-
-    return std::nullopt;
+    return endpoint->PreferredIpAddress.AddressString;
 }
 
 void SetPathAccess(const std::filesystem::path& path, DWORD Permissions, ACCESS_MODE Mode)
@@ -3172,4 +3229,14 @@ void ValidateCOMErrorMessageContains(const std::wstring& ExpectedSubstring)
         LogError("Expected COM error containing: '%ls' but none was set", ExpectedSubstring.c_str());
         VERIFY_FAIL();
     }
+}
+
+std::wstring FormatErrorMessage(std::wstring_view message, std::wstring_view errorCode)
+{
+    return std::format(
+        L"{}\r\nError code: {}\r\n"
+        L"If this error was unexpected, please consider searching for existing issues or filing a new issue at "
+        L"https://github.com/microsoft/WSL/issues.\r\n",
+        message,
+        errorCode);
 }

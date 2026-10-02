@@ -180,7 +180,8 @@ std::tuple<HRESULT, std::optional<ClientRunningWSLCProcess>, int> WSLCProcessLau
 
     wil::com_ptr<IWSLCProcess> process;
     int error = -1;
-    auto result = Session.CreateRootNamespaceProcess(m_executable.c_str(), &options, m_rows, m_columns, &process, &error);
+    auto result =
+        Session.CreateRootNamespaceProcess(m_executable.c_str(), &options, m_rows, m_columns, /* AcquireVmLease */ TRUE, &process, &error);
     if (FAILED(result))
     {
         return std::make_tuple(result, std::optional<ClientRunningWSLCProcess>(), error);
@@ -222,7 +223,7 @@ ClientRunningWSLCProcess::ClientRunningWSLCProcess(wil::com_ptr<IWSLCProcess>&& 
 {
 }
 
-wil::unique_handle ClientRunningWSLCProcess::GetStdHandle(int Index)
+wsl::windows::common::io::HandleWrapper ClientRunningWSLCProcess::GetStdHandle(int Index)
 {
     wslutil::COMOutputHandle handle;
     THROW_IF_FAILED_MSG(m_process->GetStdHandle(static_cast<WSLCFD>(Index), &handle), "Failed to get handle: %i", Index);

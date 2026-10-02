@@ -18,8 +18,10 @@ using namespace wsl::windows::wslc::execution;
 using namespace wsl::shared;
 
 namespace wsl::windows::wslc {
+
+using namespace wsl::windows::wslc::cli;
 // Volume Root Command
-std::vector<std::unique_ptr<Command>> VolumeCommand::GetCommands() const
+std::vector<std::unique_ptr<Command>> VolumeCommand::CreateCommands() const
 {
     std::vector<std::unique_ptr<Command>> commands;
     commands.push_back(std::make_unique<VolumeCreateCommand>(FullName()));
@@ -47,6 +49,6 @@ std::wstring VolumeCommand::LongDescription() const
 
 void VolumeCommand::ExecuteInternal(CLIExecutionContext& context) const
 {
-    OutputHelp();
+    OutputHelp(context.Terminal);
 }
 } // namespace wsl::windows::wslc

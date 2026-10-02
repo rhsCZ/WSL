@@ -37,6 +37,7 @@ using namespace std::chrono_literals;
 #define LXSS_DISTRO_NAME_TEST_L WIDEN(LXSS_DISTRO_NAME_TEST)
 
 #define LXSST_REMOVE_DISTRO_CONF_COMMAND_LINE L"-u root -e rm /etc/wsl.conf"
+#define LXSST_TESTS_INSTALL_COMMAND_LINE L"/bin/bash -c 'cd /data/test; ./build_tests.sh'"
 
 //
 // Test method declaration macros that tag tests with TAEF metadata for version-based selection.
@@ -144,7 +145,7 @@ using namespace std::chrono_literals;
 class WslKeepAlive
 {
 public:
-    WslKeepAlive(HANDLE Token = nullptr);
+    WslKeepAlive(HANDLE Token = nullptr, const std::wstring& DistroName = {});
 
     ~WslKeepAlive();
 
@@ -165,6 +166,7 @@ private:
     std::thread m_thread;
     std::optional<std::promise<void>> m_running;
     HANDLE m_token = nullptr;
+    std::wstring m_distroName;
 };
 
 //
@@ -356,7 +358,7 @@ private:
 class UniqueWebServer
 {
 public:
-    UniqueWebServer(LPCWSTR Endpoint, LPCWSTR ResponseContent);
+    UniqueWebServer(LPCWSTR Endpoint, LPCWSTR ResponseContent, UINT StatusCode = 200);
     UniqueWebServer(LPCWSTR Endpoint, const std::filesystem::path& path);
     ~UniqueWebServer();
     UniqueWebServer(const UniqueWebServer&) = delete;
@@ -399,6 +401,7 @@ public:
     void Expect(const std::string& Expected);
     void ExpectConsume(const std::string& Expected);
     void ExpectClosed(DWORD Timeout = 60 * 1000);
+    void Stop();
 
     std::string ReadBytes(size_t Length);
     std::string ConsumeBytes(size_t Length);
@@ -537,7 +540,7 @@ wil::unique_handle GetNonElevatedToken(TOKEN_TYPE Type = TokenPrimary);
 
 std::wstring LxssWriteWslConfig(const std::wstring& Content);
 
-std::string LxssWriteWslDistroConfig(const std::string& Content);
+std::string LxssWriteWslDistroConfig(const std::string& Content, LPCWSTR DistributionName = LXSS_DISTRO_NAME_TEST_L);
 
 enum class DrvFsMode
 {
@@ -555,6 +558,7 @@ struct TestConfigDefaults
     std::optional<bool> earlyBootLogging;
     std::optional<std::wstring> debugConsoleLogFile;
     std::optional<DrvFsMode> drvFsMode;
+    std::optional<bool> virtioFsAggregateShares;
     std::optional<wsl::core::NetworkingMode> networkingMode;
     const std::optional<std::wstring> vmSwitch;
     const std::optional<std::wstring> macAddress;
@@ -574,6 +578,7 @@ struct TestConfigDefaults
     std::optional<bool> hostAddressLoopback;
     int crashDumpCount = 100;
     std::optional<std::wstring> CrashDumpFolder;
+    std::optional<bool> isolateDistroCgroup;
 };
 
 std::wstring LxssGenerateTestConfig(TestConfigDefaults Default = {});
@@ -609,18 +614,22 @@ bool WslShutdown();
 
 void TerminateDistribution(LPCWSTR DistributionName = LXSS_DISTRO_NAME_TEST_L);
 
+void VerifyNoVmAccessToVhd(LPCWSTR VhdPath);
+
+std::wstring GetBlockDeviceInWsl(ULONGLONG SizeBytes);
+
 void Trim(std::wstring& string);
 
-inline auto EnableSystemd(const std::string& extraConfig = "")
+inline auto EnableSystemd(const std::string& extraConfig = "", LPCWSTR distroName = LXSS_DISTRO_NAME_TEST_L)
 {
     // enable systemd on the test distro by editing /etc/wsl.conf
-    LxssWriteWslDistroConfig("[boot]\nsystemd=true\n" + extraConfig);
-    TerminateDistribution();
+    LxssWriteWslDistroConfig("[boot]\nsystemd=true\n" + extraConfig, distroName);
+    TerminateDistribution(distroName);
 
-    return wil::scope_exit([] {
+    return wil::scope_exit([distroName] {
         // clean up wsl.conf file
-        LxsstuLaunchWsl(LXSST_REMOVE_DISTRO_CONF_COMMAND_LINE);
-        TerminateDistribution();
+        LxsstuLaunchWsl(std::format(L"-d {} " LXSST_REMOVE_DISTRO_CONF_COMMAND_LINE, distroName));
+        TerminateDistribution(distroName);
     });
 }
 
@@ -643,7 +652,11 @@ std::pair<wil::unique_socket, wil::unique_socket> MakeSocketPair();
 std::wstring ReadFileContent(const std::string& Path);
 std::wstring ReadFileContent(const std::wstring& Path);
 
-void WaitForOutput(wil::unique_handle handle, std::string_view targetValue, std::chrono::milliseconds timeout = 60s);
+void WaitForOutput(wsl::windows::common::io::HandleWrapper handle, std::string_view targetValue, std::chrono::milliseconds timeout = 60s);
+inline void WaitForOutput(wil::unique_handle handle, std::string_view targetValue, std::chrono::milliseconds timeout = 60s)
+{
+    WaitForOutput(wsl::windows::common::io::HandleWrapper{std::move(handle)}, targetValue, timeout);
+}
 
 std::string EscapeString(const std::string& Input);
 
@@ -655,7 +668,7 @@ void LoadTestImage(IWSLCSession& session, std::string_view imageName);
 
 void ExpectHttpResponse(LPCWSTR Url, std::optional<int> expectedCode, bool retry = false);
 
-std::optional<std::string> GetHostAdapterIpv4();
+std::optional<std::wstring> GetHostAdapterIpv4();
 
 template <typename T>
 void VerifyAreEqualUnordered(const std::vector<T>& expected, const std::vector<T>& actual, const std::source_location& source = std::source_location::current())
@@ -720,3 +733,5 @@ void WriteSocket(SOCKET Socket, const void* data, size_t size);
 void ValidateCOMErrorMessage(const std::optional<std::wstring>& Expected, const std::source_location& Source = std::source_location::current());
 
 void ValidateCOMErrorMessageContains(const std::wstring& ExpectedSubstring);
+
+std::wstring FormatErrorMessage(std::wstring_view message, std::wstring_view errorCode);

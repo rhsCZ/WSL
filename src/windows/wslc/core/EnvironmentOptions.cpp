@@ -11,28 +11,16 @@ Module Name:
 #include "EnvironmentOptions.h"
 
 namespace wsl::windows::wslc {
-namespace {
 
-    // nullopt iff the variable is not defined; engaged (possibly empty) otherwise.
-    std::optional<std::wstring> ReadEnv(const wchar_t* name)
-    {
-        std::wstring value;
-        const HRESULT hr = wil::GetEnvironmentVariableW(name, value);
-        if (hr == HRESULT_FROM_WIN32(ERROR_ENVVAR_NOT_FOUND))
-        {
-            return std::nullopt;
-        }
+void ApplyEnvironmentOptions(argument::ArgMap& target, const std::vector<Argument>& arguments) noexcept
+{
+    ApplyEnvironmentOptions(target, arguments, c_envBindings);
+}
 
-        THROW_IF_FAILED(hr);
-        return value;
-    }
-
-} // namespace
-
-void ApplyEnvironmentOptions(argument::ArgMap& target, const std::vector<Argument>& definedArgs) noexcept
+void ApplyEnvironmentOptions(argument::ArgMap& target, const std::vector<Argument>& arguments, std::span<const EnvBinding> bindings) noexcept
 try
 {
-    for (const auto& arg : definedArgs)
+    for (const auto& arg : arguments)
     {
         // Lowest-precedence: skip args already set by the caller.
         if (target.Contains(arg.Type()))
@@ -40,14 +28,14 @@ try
             continue;
         }
 
-        for (const auto& binding : c_envBindings)
+        for (const auto& binding : bindings)
         {
             if (binding.Type != arg.Type())
             {
                 continue;
             }
 
-            auto value = ReadEnv(binding.Name);
+            auto value = wsl::windows::common::wslutil::ReadEnvironmentVariable(binding.Name);
             if (!value.has_value())
             {
                 continue;
