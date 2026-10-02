@@ -10,11 +10,6 @@ Abstract:
 
     This file contains the public WSL Container SDK api definitions.
 
-    PREVIEW NOTICE: This API is currently in preview and is subject to breaking
-    changes in future releases without prior notice. Do not rely on API stability
-    for production workloads. Features, function signatures, and behaviors may
-    change between releases during the preview period.
-
 --*/
 #pragma once
 #include <winsock2.h>
@@ -43,6 +38,10 @@ EXTERN_C_START
 #define WSLC_E_REGISTRY_BLOCKED_BY_POLICY MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, WSLC_E_BASE + 13) /* 0x8004060D */
 #define WSLC_E_VOLUME_NOT_AVAILABLE MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, WSLC_E_BASE + 14)       /* 0x8004060E */
 #define WSLC_E_SESSION_NOT_FOUND MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, WSLC_E_BASE + 15)          /* 0x8004060F */
+#define WSLC_E_VM_NOT_RUNNING MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, WSLC_E_BASE + 16)             /* 0x80040610 */
+#define WSLC_E_EVENTS_LOST MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, WSLC_E_BASE + 17)                /* 0x80040611 */
+#define WSLC_E_EVENT_STREAM_FINISHED MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, WSLC_E_BASE + 18)      /* 0x80040612 */
+#define WSLC_E_CONTAINER_DELETED MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, WSLC_E_BASE + 19)          /* 0x80040613 */
 
 // Session values
 #define WSLC_SESSION_OPTIONS_SIZE 72
@@ -229,6 +228,12 @@ STDAPI WslcInitContainerSettings(_In_ PCSTR imageName, _Out_ WslcContainerSettin
 
 STDAPI WslcCreateContainer(_In_ WslcSession session, _In_ const WslcContainerSettings* containerSettings, _Out_ WslcContainer* container, _Outptr_opt_result_z_ PWSTR* errorMessage);
 
+// Opens an existing container by name, full ID, or partial ID prefix.
+// The returned WslcContainer handle is owned by the caller; release it with WslcReleaseContainer.
+// Returns WSLC_E_CONTAINER_NOT_FOUND if no matching container exists, or
+// WSLC_E_CONTAINER_PREFIX_AMBIGUOUS if the given prefix matches more than one container.
+STDAPI WslcOpenContainer(_In_ WslcSession session, _In_z_ PCSTR nameOrId, _Out_ WslcContainer* container, _Outptr_opt_result_z_ PWSTR* errorMessage);
+
 STDAPI WslcStartContainer(_In_ WslcContainer container, _In_ WslcContainerStartFlags flags, _Outptr_opt_result_z_ PWSTR* errorMessage);
 
 // OPTIONAL CONTAINER SETTINGS
@@ -335,6 +340,26 @@ STDAPI WslcSetProcessSettingsCmdLine(_In_ WslcProcessSettings* processSettings, 
 
 STDAPI WslcSetProcessSettingsEnvVariables(_In_ WslcProcessSettings* processSettings, _In_reads_(argc) PCSTR const* key_value, size_t argc);
 
+// Flags that control optional behavior of a process.
+typedef enum WslcProcessFlags
+{
+    WSLC_PROCESS_FLAG_NONE = 0x00000000,
+    // Enables standard input for the process. Standard input is disabled by
+    // default: without this flag the process observes an immediately closed
+    // stdin and WSLC_PROCESS_IO_HANDLE_STDIN cannot be used.
+    WSLC_PROCESS_FLAG_STDIN = 0x00000001,
+} WslcProcessFlags;
+
+DEFINE_ENUM_FLAG_OPERATORS(WslcProcessFlags);
+
+// Sets the flags for the process, replacing any previously set flags.
+//
+// Unknown flag bits are rejected with E_INVALIDARG.
+//
+// Must be called before the settings are used to create a process
+// (WslcCreateContainerProcess) or container (WslcCreateContainer).
+STDAPI WslcSetProcessSettingsFlags(_In_ WslcProcessSettings* processSettings, _In_ WslcProcessFlags flags);
+
 typedef enum WslcProcessIOHandle
 {
     WSLC_PROCESS_IO_HANDLE_STDIN = 0,
@@ -399,6 +424,11 @@ typedef struct WslcProcessCallbacks
 } WslcProcessCallbacks;
 
 STDAPI WslcSetProcessSettingsCallbacks(_In_ WslcProcessSettings* processSettings, _In_ const WslcProcessCallbacks* callbacks, _In_opt_ PVOID context);
+
+// Sets IO callbacks for the init process of a container.
+// Must be called before WslcStartContainer (with WSLC_CONTAINER_START_FLAG_ATTACH).
+// Has no effect on a container that is already running.
+STDAPI WslcSetContainerInitProcessIOCallbacks(_In_ WslcContainer container, _In_ const WslcProcessCallbacks* callbacks, _In_opt_ PVOID context);
 
 // PROCESS MANAGEMENT
 
@@ -530,7 +560,15 @@ typedef struct WslcPushImageOptions
 
 STDAPI WslcPushSessionImage(_In_ WslcSession session, _In_ const WslcPushImageOptions* options, _Outptr_opt_result_z_ PWSTR* errorMessage);
 
-// Authenticates with a container registry and returns an identity token.
+typedef enum WslcIdentityTokenType
+{
+    WSLC_IDENTITY_TOKEN_TYPE_UNKNOWN = 0,
+    WSLC_IDENTITY_TOKEN_TYPE_TOKEN = 1,
+    WSLC_IDENTITY_TOKEN_TYPE_CREDENTIALS = 2,
+} WslcIdentityTokenType;
+
+// Authenticates with a container registry and returns an identity token suitable for use as
+// the registryAuth value in WslcPullSessionImage and WslcPushSessionImage.
 //
 // Parameters:
 //   session
@@ -546,21 +584,42 @@ STDAPI WslcPushSessionImage(_In_ WslcSession session, _In_ const WslcPushImageOp
 //       The password for authentication.
 //
 //   identityToken
-//       On success, receives a pointer to a null-terminated ANSI string
-//       containing the identity token.
+//       On success, receives a pointer to a null-terminated ANSI string containing a
+//       base64-encoded JSON object that can be passed directly as the registryAuth value to
+//       WslcPullSessionImage or WslcPushSessionImage.
 //
-//       The string is allocated using CoTaskMemAlloc. The caller takes
-//       ownership of the returned memory and must free it by calling
-//       CoTaskMemFree when it is no longer needed.
+//       The string is allocated using CoTaskMemAlloc. The caller takes ownership of the
+//       returned memory and must free it by calling CoTaskMemFree when it is no longer needed.
+//
+//   tokenType
+//       Optional. On success, receives the type of credential embedded in identityToken:
+//         WSLC_IDENTITY_TOKEN_TYPE_TOKEN      - the server returned an identity token;
+//                                               identityToken encodes {"identitytoken": ...}
+//         WSLC_IDENTITY_TOKEN_TYPE_CREDENTIALS - the server returned no token; the supplied
+//                                               username/password are embedded instead as
+//                                               {"username": ..., "password": ...}
+//       On failure, set to WSLC_IDENTITY_TOKEN_TYPE_UNKNOWN.
+//       May be null if the caller does not need the token type.
+//
+//   errorMessage
+//       Optional. On failure, receives a human-readable error message. May be null.
 //
 // Return Value:
 //   S_OK on success. Otherwise, an HRESULT error code indicating the failure.
+//
+// Outcome table:
+//   Outcome                       | HRESULT | identityToken                        | tokenType
+//   ------------------------------|---------|--------------------------------------|----------
+//   Failure                       | FAILED  | nullptr                              | UNKNOWN
+//   Success, server returns token | S_OK    | base64({"identitytoken": "<token>"}) | TOKEN
+//   Success, no token returned    | S_OK    | base64({"username":..,"password":..})| CREDENTIALS
 STDAPI WslcSessionAuthenticate(
     _In_ WslcSession session,
     _In_z_ PCSTR serverAddress,
     _In_z_ PCSTR username,
     _In_z_ PCSTR password,
     _Outptr_result_z_ PSTR* identityToken,
+    _Out_opt_ WslcIdentityTokenType* tokenType,
     _Outptr_opt_result_z_ PWSTR* errorMessage);
 
 // Retrieves the list of container images
@@ -624,8 +683,18 @@ STDAPI WslcGetVersion(_Out_writes_(1) WslcVersion* version);
 typedef __callback void(CALLBACK* WslcInstallCallback)(
     _In_ WslcComponentFlags component, _In_ uint32_t progressSteps, _In_ uint32_t totalSteps, _In_opt_ PVOID context);
 
+typedef enum WslcInstallOptions
+{
+    WSLC_INSTALL_OPTION_NONE = 0,
+    // Allows components to be reinstalled.
+    WSLC_INSTALL_OPTION_REPAIR = 1,
+} WslcInstallOptions;
+
+DEFINE_ENUM_FLAG_OPERATORS(WslcInstallOptions);
+
 // Callbacks will only be made for components that are actively installed by this call.
-// That list can be acquired prior to this call with `WslcCanRun`.
-STDAPI WslcInstallWithDependencies(_In_opt_ WslcInstallCallback progressCallback, _In_opt_ PVOID context);
+// The list of required components can be acquired prior to this call with `WslcGetMissingComponents`.
+STDAPI WslcInstallWithDependencies(
+    _In_ WslcComponentFlags components, _In_ WslcInstallOptions options, _In_opt_ WslcInstallCallback progressCallback, _In_opt_ PVOID context);
 
 EXTERN_C_END

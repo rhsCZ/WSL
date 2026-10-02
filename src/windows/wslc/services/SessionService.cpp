@@ -15,14 +15,75 @@ Abstract:
 #include "precomp.h"
 #include "SessionService.h"
 #include "ConsoleService.h"
+#include "JsonUtils.h"
 #include "WarningCallback.h"
+#include "wslc_schema.h"
+
 #include <wslc.h>
 #include <WSLCProcessLauncher.h>
 
 namespace wsl::windows::wslc::services {
+
+using namespace wsl::windows::wslc::cli;
 using namespace wsl::shared;
+using namespace wsl::shared::string;
+using namespace wsl::windows::common;
 using namespace wsl::windows::wslc::models;
 namespace wslutil = wsl::windows::common::wslutil;
+
+namespace {
+
+    std::string FormatEvent(const wslc_schema::Event& event)
+    {
+        auto output =
+            std::format("{} {} {} {}", timestamp::EpochToLocalRfc3339Nano(event.timeNano), event.Type, event.Action, event.Actor.ID);
+        if (!event.Actor.Attributes.empty())
+        {
+            output.append(" (");
+            bool first = true;
+            for (const auto& [key, value] : event.Actor.Attributes)
+            {
+                if (!first)
+                {
+                    output.append(", ");
+                }
+
+                output.append(std::format("{}={}", key, value));
+                first = false;
+            }
+
+            output.push_back(')');
+        }
+
+        return output;
+    }
+
+    std::string FormatEventJson(const wslc_schema::Event& event)
+    {
+        nlohmann::json output{
+            {"Type", event.Type},
+            {"Action", event.Action},
+            {"Actor", event.Actor},
+            {"scope", "local"},
+            {"time", std::chrono::floor<std::chrono::seconds>(std::chrono::nanoseconds{event.timeNano}).count()},
+            {"timeNano", event.timeNano}};
+
+        // Docker still reports these deprecated fields for container events.
+        if (event.Type == "container")
+        {
+            output["status"] = event.Action;
+            output["id"] = event.Actor.ID;
+
+            if (const auto image = event.Actor.Attributes.find("image"); image != event.Actor.Attributes.end())
+            {
+                output["from"] = image->second;
+            }
+        }
+
+        return ToJson(output, c_jsonCompactIndent);
+    }
+
+} // namespace
 
 static wil::com_ptr<IWSLCSessionManager> CreateSessionManager()
 {
@@ -52,19 +113,21 @@ Session SessionService::OpenDefaultSession()
     return OpenSessionByName(CreateSessionManager(), nullptr);
 }
 
-Session SessionService::OpenOrCreateDefaultSession()
+Session SessionService::OpenOrCreateDefaultSession(Terminal& terminal)
 {
+    WarningCallback warningCallback(terminal);
     auto manager = CreateSessionManager();
 
-    // Null Settings = default session with server-determined name and settings.
+    // Null Settings = default session with server-determined name and settings. The warning callback
+    // is consumed during CreateSession (session initialization); it is not retained afterwards.
     wil::com_ptr<IWSLCSession> session;
-    auto warningCallback = Microsoft::WRL::Make<WarningCallback>();
-    THROW_IF_FAILED(manager->CreateSession(nullptr, WSLCSessionFlagsNone, warningCallback.Get(), &session));
+    THROW_IF_FAILED(manager->CreateSession(nullptr, WSLCSessionFlagsNone, &warningCallback, &session));
     wsl::windows::common::security::ConfigureForCOMImpersonation(session.get());
+
     return Session(std::move(session));
 }
 
-int SessionService::Attach(const Session& session)
+int SessionService::Attach(Terminal& terminal, const Session& session)
 {
     // Configure console for interactive usage.
     wsl::windows::common::ConsoleState console{};
@@ -90,7 +153,7 @@ int SessionService::Attach(const Session& session)
         try
         {
             wsl::windows::common::relay::StandardInputRelay(
-                GetStdHandle(STD_INPUT_HANDLE), tty.get(), updateTerminalSize, exitEvent.get());
+                GetStdHandle(STD_INPUT_HANDLE), tty.Get(), updateTerminalSize, exitEvent.get());
         }
         catch (...)
         {
@@ -107,29 +170,29 @@ int SessionService::Attach(const Session& session)
     });
 
     // Relay tty output -> console (blocks until output ends).
-    wsl::windows::common::relay::InterruptableRelay(tty.get(), GetStdHandle(STD_OUTPUT_HANDLE), exitEvent.get());
+    wsl::windows::common::relay::InterruptableRelay(tty.Get(), GetStdHandle(STD_OUTPUT_HANDLE), exitEvent.get());
 
     process.GetExitEvent().wait();
 
     auto exitCode = process.GetExitCode();
 
-    wslutil::PrintMessage(wsl::shared::Localization::MessageWslcShellExited(string::MultiByteToWide(shell), static_cast<int>(exitCode)), stdout);
+    terminal.Output(L"{}\n", wsl::shared::Localization::MessageWslcShellExited(string::MultiByteToWide(shell), static_cast<int>(exitCode)));
 
     return static_cast<int>(exitCode);
 }
 
-int SessionService::Enter(const std::wstring& storagePath, const std::wstring& displayName)
+int SessionService::Enter(Terminal& terminal, const std::wstring& storagePath, const std::wstring& displayName)
 {
     THROW_HR_IF(E_INVALIDARG, storagePath.empty());
     THROW_HR_IF(E_INVALIDARG, displayName.empty());
 
+    WarningCallback warningCallback(terminal);
     auto sessionManager = CreateSessionManager();
 
     wil::com_ptr<IWSLCSession> session;
-    auto warningCallback = Microsoft::WRL::Make<WarningCallback>();
-    THROW_IF_FAILED(sessionManager->EnterSession(displayName.c_str(), storagePath.c_str(), warningCallback.Get(), &session));
+    THROW_IF_FAILED(sessionManager->EnterSession(displayName.c_str(), storagePath.c_str(), &warningCallback, &session));
     wsl::windows::common::security::ConfigureForCOMImpersonation(session.get());
-    wsl::windows::common::wslutil::PrintMessage(Localization::MessageWslcCreatedSession(displayName), stderr);
+    terminal.Info(L"{}\n", Localization::MessageWslcCreatedSession(displayName));
 
     const std::string shell = "/bin/sh";
     wsl::windows::common::WSLCProcessLauncher launcher{shell, {shell, "--login"}, {"TERM=xterm-256color"}, WSLCProcessFlagsTty | WSLCProcessFlagsStdin};
@@ -138,7 +201,15 @@ int SessionService::Enter(const std::wstring& storagePath, const std::wstring& d
     const auto windowSize = console.GetWindowSize();
     launcher.SetTtySize(windowSize.Y, windowSize.X);
 
-    return ConsoleService::AttachToCurrentConsole(console, launcher.Launch(*session.get()));
+    return ConsoleService::AttachToCurrentConsole(terminal, console, launcher.Launch(*session.get()));
+}
+
+WSLCVersion SessionService::ManagerVersion()
+{
+    WSLCVersion version{};
+    THROW_IF_FAILED(CreateSessionManager()->GetVersion(&version));
+
+    return version;
 }
 
 std::vector<SessionInformation> SessionService::List()
@@ -161,7 +232,7 @@ std::vector<SessionInformation> SessionService::List()
     return result;
 }
 
-int SessionService::Run(const Session& session, const std::vector<std::string>& arguments)
+int SessionService::Run(Terminal& terminal, const Session& session, const std::vector<std::string>& arguments)
 {
     WI_ASSERT(!arguments.empty());
 
@@ -175,10 +246,46 @@ int SessionService::Run(const Session& session, const std::vector<std::string>& 
     THROW_IF_FAILED(result);
 
     wsl::windows::common::ConsoleState console{};
-    return ConsoleService::AttachToCurrentConsole(console, std::move(process.value()));
+    return ConsoleService::AttachToCurrentConsole(terminal, console, std::move(process.value()));
 }
 
-int SessionService::TerminateSession(const Session& session)
+void SessionService::StreamEvents(Terminal& terminal, const Session& session, const EventStreamOptions& options, HANDLE cancelEvent)
+{
+    std::vector<WSLCFilter> filterEntries;
+    filterEntries.reserve(options.Filters.size());
+    for (const auto& [key, value] : options.Filters)
+    {
+        filterEntries.push_back({.Key = key.c_str(), .Value = value.c_str()});
+    }
+
+    [[maybe_unused]] auto operation = session.BeginContainerOperation();
+
+    wil::com_ptr<IWSLCEventStream> stream;
+    THROW_IF_FAILED(session.Get()->GetEvents(
+        options.Since, options.Until, filterEntries.empty() ? nullptr : filterEntries.data(), static_cast<ULONG>(filterEntries.size()), &stream));
+
+    HRESULT result = S_OK;
+    while (SUCCEEDED(result))
+    {
+        wil::unique_cotaskmem_ansistring eventJson;
+        result = stream->GetNext(cancelEvent, &eventJson);
+        if (SUCCEEDED(result))
+        {
+            const auto event = wsl::shared::FromJson<wslc_schema::Event>(eventJson.get());
+            terminal.Output(L"{}\n", options.Format == FormatType::Json ? FormatEventJson(event) : FormatEvent(event));
+            terminal.Flush(Terminal::Level::Output);
+        }
+    }
+
+    if (result == E_ABORT && cancelEvent != nullptr && wil::event_is_signaled(cancelEvent))
+    {
+        return;
+    }
+
+    THROW_HR_IF(result, result != WSLC_E_EVENT_STREAM_FINISHED);
+}
+
+int SessionService::TerminateSession(Terminal& terminal, const Session& session)
 {
     HRESULT hr = session.Get()->Terminate();
     if (FAILED(hr))
@@ -188,12 +295,11 @@ int SessionService::TerminateSession(const Session& session)
         wil::unique_cotaskmem_string displayName;
         if (SUCCEEDED(session.Get()->GetDisplayName(&displayName)) && displayName)
         {
-            wslutil::PrintMessage(
-                Localization::MessageErrorCode(Localization::MessageWslcTerminateSessionFailed(displayName.get()), errorString), stderr);
+            terminal.Error(L"{}\n", Localization::MessageErrorCode(Localization::MessageWslcTerminateSessionFailed(displayName.get()), errorString));
         }
         else
         {
-            wslutil::PrintMessage(Localization::MessageErrorCode(Localization::MessageWslcTerminateDefaultSessionFailed(), errorString), stderr);
+            terminal.Error(L"{}\n", Localization::MessageErrorCode(Localization::MessageWslcTerminateDefaultSessionFailed(), errorString));
         }
         return 1;
     }

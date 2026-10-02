@@ -12,6 +12,7 @@ Abstract:
 
 --*/
 
+#include "ArgumentConvertedTypes.h"
 #include "ContainerCommand.h"
 #include "CLIExecutionContext.h"
 #include "ContainerTasks.h"
@@ -27,7 +28,7 @@ namespace wsl::windows::wslc {
 std::vector<Argument> ContainerAttachCommand::GetArguments() const
 {
     return {
-        Argument::Create(ArgType::ContainerId, true),
+        Argument::Create(ArgType::ContainerId, {.Required = true}),
     };
 }
 
@@ -45,6 +46,6 @@ void ContainerAttachCommand::ExecuteInternal(CLIExecutionContext& context) const
 {
     context               //
         << ResolveSession //
-        << AttachContainer(context.Args.Get<ArgType::ContainerId>());
+        << AttachContainer(context.Args.GetValue<ArgType::ContainerId>());
 }
 } // namespace wsl::windows::wslc

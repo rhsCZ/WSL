@@ -73,6 +73,15 @@ struct FlagsTraits<WslcDeleteContainerFlags>
     WSLC_FLAG_VALUE_ASSERT(WSLC_DELETE_CONTAINER_FLAG_FORCE, WSLCDeleteFlagsForce);
 };
 
+template <>
+struct FlagsTraits<WslcProcessFlags>
+{
+    using WslcType = WSLCProcessFlags;
+    // WSLCProcessFlagsTty is intentionally not exposed by the SDK yet.
+    constexpr static WslcProcessFlags Mask = WSLC_PROCESS_FLAG_STDIN;
+    WSLC_FLAG_VALUE_ASSERT(WSLC_PROCESS_FLAG_STDIN, WSLCProcessFlagsStdin);
+};
+
 template <typename Flags>
 typename FlagsTraits<Flags>::WslcType ConvertFlags(Flags flags)
 {
@@ -218,9 +227,9 @@ bool CopyProcessSettingsToRuntime(WSLCCompatProcessOptions& runtimeOptions, cons
         runtimeOptions.CommandLine.Count = initProcessOptions->commandLineCount;
         runtimeOptions.Environment.Values = initProcessOptions->environment;
         runtimeOptions.Environment.Count = initProcessOptions->environmentCount;
+        runtimeOptions.Flags = ConvertFlags(initProcessOptions->flags);
 
         // TODO: No user access
-        // containerOptions.InitProcessOptions.Flags;
         // containerOptions.InitProcessOptions.TtyRows;
         // containerOptions.InitProcessOptions.TtyColumns;
         // containerOptions.InitProcessOptions.User;
@@ -908,6 +917,43 @@ try
 }
 CATCH_RETURN();
 
+STDAPI WslcOpenContainer(_In_ WslcSession session, _In_z_ PCSTR nameOrId, _Out_ WslcContainer* container, _Outptr_opt_result_z_ PWSTR* errorMessage)
+try
+{
+    RETURN_HR_IF_NULL(E_POINTER, container);
+    *container = nullptr;
+    RETURN_HR_IF_NULL(E_POINTER, nameOrId);
+    ErrorInfoWrapper errorInfoWrapper{errorMessage};
+    auto internalSession = CheckAndGetInternalType(session);
+    RETURN_HR_IF_NULL(HRESULT_FROM_WIN32(ERROR_INVALID_STATE), internalSession->session);
+
+    auto result = std::make_unique<WslcContainerImpl>();
+
+    if (SUCCEEDED(errorInfoWrapper.CaptureResult(internalSession->session->OpenContainer(nameOrId, &result->container))))
+    {
+        wsl::windows::common::security::ConfigureForCOMImpersonation(result->container.get());
+        *container = reinterpret_cast<WslcContainer>(result.release());
+    }
+
+    return errorInfoWrapper;
+}
+CATCH_RETURN();
+
+STDAPI WslcSetContainerInitProcessIOCallbacks(_In_ WslcContainer container, _In_ const WslcProcessCallbacks* callbacks, _In_opt_ PVOID context)
+try
+{
+    RETURN_HR_IF_NULL(E_POINTER, callbacks);
+    auto internalType = CheckAndGetInternalType(container);
+
+    internalType->ioCallbackOptions.onStdOut = callbacks->onStdOut;
+    internalType->ioCallbackOptions.onStdErr = callbacks->onStdErr;
+    internalType->ioCallbackOptions.onExit = callbacks->onExit;
+    internalType->ioCallbackOptions.callbackContext = context;
+
+    return S_OK;
+}
+CATCH_RETURN();
+
 STDAPI WslcStartContainer(_In_ WslcContainer container, _In_ WslcContainerStartFlags flags, _Outptr_opt_result_z_ PWSTR* errorMessage)
 try
 {
@@ -1259,6 +1305,20 @@ try
 }
 CATCH_RETURN();
 
+STDAPI WslcSetProcessSettingsFlags(_In_ WslcProcessSettings* processSettings, _In_ WslcProcessFlags flags)
+try
+{
+    auto internalType = CheckAndGetInternalType(processSettings);
+
+    // Reject unknown flag bits so future additions can't be silently ignored.
+    RETURN_HR_IF(E_INVALIDARG, WI_IsAnyFlagSet(flags, ~FlagsTraits<WslcProcessFlags>::Mask));
+
+    internalType->flags = flags;
+
+    return S_OK;
+}
+CATCH_RETURN();
+
 // PROCESS MANAGEMENT
 
 STDAPI WslcGetProcessPid(_In_ WslcProcess process, _Out_ uint32_t* pid)
@@ -1536,6 +1596,7 @@ STDAPI WslcSessionAuthenticate(
     _In_z_ PCSTR username,
     _In_z_ PCSTR password,
     _Outptr_result_z_ PSTR* identityToken,
+    _Out_opt_ WslcIdentityTokenType* tokenType,
     _Outptr_opt_result_z_ PWSTR* errorMessage)
 try
 {
@@ -1548,12 +1609,36 @@ try
     RETURN_HR_IF_NULL(E_POINTER, identityToken);
 
     *identityToken = nullptr;
+    if (tokenType != nullptr)
+    {
+        *tokenType = WSLC_IDENTITY_TOKEN_TYPE_UNKNOWN;
+    }
 
-    wil::unique_cotaskmem_ansistring token;
-    auto hr = errorInfoWrapper.CaptureResult(internalType->session->Authenticate(serverAddress, username, password, &token));
+    wil::unique_cotaskmem_ansistring rawToken;
+    auto hr = errorInfoWrapper.CaptureResult(internalType->session->Authenticate(serverAddress, username, password, &rawToken));
     if (SUCCEEDED(hr))
     {
-        *identityToken = token.release();
+        std::string authHeader;
+        WslcIdentityTokenType type;
+
+        if (rawToken && strlen(rawToken.get()) > 0)
+        {
+            authHeader = BuildRegistryAuthHeader(std::string{rawToken.get()});
+            type = WSLC_IDENTITY_TOKEN_TYPE_TOKEN;
+        }
+        else
+        {
+            authHeader = BuildRegistryAuthHeader(std::string{username}, std::string{password});
+            type = WSLC_IDENTITY_TOKEN_TYPE_CREDENTIALS;
+        }
+
+        auto result = wil::make_unique_ansistring<wil::unique_cotaskmem_ansistring>(authHeader.c_str());
+        *identityToken = result.release();
+
+        if (tokenType != nullptr)
+        {
+            *tokenType = type;
+        }
     }
 
     return errorInfoWrapper;
@@ -1664,33 +1749,43 @@ try
 }
 CATCH_RETURN();
 
-STDAPI WslcInstallWithDependencies(_In_opt_ WslcInstallCallback progressCallback, _In_opt_ PVOID context)
+STDAPI WslcInstallWithDependencies(
+    _In_ WslcComponentFlags components, _In_ WslcInstallOptions options, _In_opt_ WslcInstallCallback progressCallback, _In_opt_ PVOID context)
 try
 {
-    HRESULT result = S_OK;
-    bool needsVirtualMachine = NeedsVirtualMachineServicesInstalled();
-    auto runtimeResult = CreateSessionManagerRaw().second;
+    // Reject unknown flag bits.
+    constexpr WslcComponentFlags c_knownComponents =
+        WSLC_COMPONENT_FLAG_VIRTUAL_MACHINE_PLATFORM | WSLC_COMPONENT_FLAG_WSL_PACKAGE | WSLC_COMPONENT_FLAG_SDK_NEEDS_UPDATE;
+    RETURN_HR_IF(E_INVALIDARG, (components & ~c_knownComponents) != WSLC_COMPONENT_FLAG_NONE);
+    constexpr WslcInstallOptions c_knownOptions = WSLC_INSTALL_OPTION_REPAIR;
+    RETURN_HR_IF(E_INVALIDARG, (options & ~c_knownOptions) != WSLC_INSTALL_OPTION_NONE);
 
-    if (!needsVirtualMachine && SUCCEEDED(runtimeResult))
+    // This API cannot update the SDK that the client is using.
+    RETURN_HR_IF(WSLC_E_SDK_UPDATE_NEEDED, WI_IsFlagSet(components, WSLC_COMPONENT_FLAG_SDK_NEEDS_UPDATE));
+
+    HRESULT result = S_OK;
+
+    if (components == WSLC_COMPONENT_FLAG_NONE)
     {
         return result;
     }
 
-    THROW_HR_IF(runtimeResult, runtimeResult != REGDB_E_CLASSNOTREG && runtimeResult != WSLC_E_SDK_UPDATE_NEEDED);
-
-    // Installing these components requires elevation.
+    // Installing components requires elevation.
     RETURN_HR_IF(
         HRESULT_FROM_WIN32(ERROR_ELEVATION_REQUIRED),
         !wsl::windows::common::security::IsTokenElevated(GetCurrentThreadEffectiveToken()) &&
             !wsl::windows::common::security::IsTokenLocalSystem(nullptr));
 
-    if (needsVirtualMachine)
+    bool isRepair = WI_IsFlagSet(options, WSLC_INSTALL_OPTION_REPAIR);
+
+    if (WI_IsFlagSet(components, WSLC_COMPONENT_FLAG_VIRTUAL_MACHINE_PLATFORM))
     {
         if (progressCallback)
         {
             progressCallback(WSLC_COMPONENT_FLAG_VIRTUAL_MACHINE_PLATFORM, 0, 1, context);
         }
 
+        // No difference between install and repair, just let DISM attempt to enable the feature.
         auto exitCode = WslInstall::InstallOptionalComponent(WslInstall::c_optionalFeatureNameVmp, false);
         if (exitCode == ERROR_SUCCESS_REBOOT_REQUIRED)
         {
@@ -1709,7 +1804,7 @@ try
         }
     }
 
-    if (!SUCCEEDED(runtimeResult))
+    if (WI_IsFlagSet(components, WSLC_COMPONENT_FLAG_WSL_PACKAGE))
     {
         std::function<void(uint32_t)> callback;
         if (progressCallback)
@@ -1719,19 +1814,21 @@ try
             };
         }
 
-        wsl::windows::common::WindowsUpdateContext wuContext;
-        wuContext.RunUpdateFlow(true, callback);
+        using WindowsUpdateContext = wsl::windows::common::WindowsUpdateContext;
+        WindowsUpdateContext wuContext;
+        wuContext.RunUpdateFlow(
+            isRepair ? WindowsUpdateContext::UpdateOptions::ResetProductRegistration : WindowsUpdateContext::UpdateOptions::EnsureProductRegistration,
+            callback);
 
-        // Because we do a forced install here, we expect an update.
         if (wuContext.GetUpdateCount() == 0)
         {
-            // During the preview period, the package may not be published yet, so fall back to getting it from GH.
-            // When moving to GA, change this to a hard error to indicate a service configuration issue.
+            // If Windows Update has no matching package, fall back to getting it from GitHub.
             if (callback)
             {
                 callback(0);
             }
-            wsl::windows::common::install::UpdatePackage(true, false, false);
+            // Use pre-release builds and repair semantics (required since this function uses the SDK binary version as a filter).
+            wsl::windows::common::install::UpdatePackage(true, true, false);
             if (callback)
             {
                 callback(100);

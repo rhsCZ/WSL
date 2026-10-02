@@ -21,7 +21,9 @@ Abstract:
 namespace WSLCE2ETests {
 
 using namespace WEX::Logging;
-using namespace wsl::windows::common;
+
+namespace wslutil = wsl::windows::common::wslutil;
+using wsl::windows::common::SubProcess;
 
 namespace {
     wil::unique_handle GetNonElevatedPrimaryToken()
@@ -147,7 +149,13 @@ bool WSLCExecutionResult::StdoutContainsSubstring(const std::wstring& substring)
     return Stdout.value().find(substring) != std::wstring::npos;
 }
 
-WSLCExecutionResult RunWslc(const std::wstring& commandLine, ElevationType elevationType)
+bool WSLCExecutionResult::StderrContainsSubstring(const std::wstring& substring) const
+{
+    VERIFY_IS_TRUE(Stderr.has_value());
+    return Stderr.value().find(substring) != std::wstring::npos;
+}
+
+WSLCExecutionResult RunWslc(const std::wstring& commandLine, ElevationType elevationType, HANDLE stdinHandle)
 {
     auto cmd = L"\"" + GetWslcPath() + L"\" " + commandLine;
     wsl::windows::common::SubProcess process(nullptr, cmd.c_str());
@@ -160,10 +168,23 @@ WSLCExecutionResult RunWslc(const std::wstring& commandLine, ElevationType eleva
         process.SetToken(nonElevatedToken.get());
     }
 
-    auto nul = wsl::windows::common::filesystem::OpenNulDevice(GENERIC_READ);
-    THROW_IF_WIN32_BOOL_FALSE(SetHandleInformation(nul.get(), HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
+    wil::unique_hfile nul;
+    wil::unique_hfile stdinDup;
+    if (stdinHandle)
+    {
+        // Duplicate as inheritable to avoid mutating the caller's handle state.
+        THROW_IF_WIN32_BOOL_FALSE(
+            DuplicateHandle(GetCurrentProcess(), stdinHandle, GetCurrentProcess(), stdinDup.put(), 0, TRUE, DUPLICATE_SAME_ACCESS));
+        stdinHandle = stdinDup.get();
+    }
+    else
+    {
+        nul = wsl::windows::common::filesystem::OpenNulDevice(GENERIC_READ);
+        THROW_IF_WIN32_BOOL_FALSE(SetHandleInformation(nul.get(), HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT));
+        stdinHandle = nul.get();
+    }
 
-    process.SetStdHandles(nul.get(), nullptr, nullptr);
+    process.SetStdHandles(stdinHandle, nullptr, nullptr);
 
     const auto output = process.RunAndCaptureOutput();
     return {.CommandLine = commandLine, .Stdout = output.Stdout, .Stderr = output.Stderr, .ExitCode = output.ExitCode};
@@ -172,6 +193,23 @@ WSLCExecutionResult RunWslc(const std::wstring& commandLine, ElevationType eleva
 void RunWslcAndVerify(const std::wstring& cmd, const WSLCExecutionResult& expected, ElevationType elevationType)
 {
     RunWslc(cmd, elevationType).Verify(expected);
+}
+
+std::set<std::wstring> RunWslcAndGetStdoutLineSet(const std::wstring& cmd, ElevationType elevationType)
+{
+    const auto result = RunWslc(cmd, elevationType);
+    result.Verify({.Stderr = L"", .ExitCode = 0});
+
+    std::set<std::wstring> lines;
+    for (auto& line : result.GetStdoutLines())
+    {
+        if (!line.empty())
+        {
+            lines.insert(std::move(line));
+        }
+    }
+
+    return lines;
 }
 
 WSLCExecutionResult RunWslcAndRedirectToFile(const std::wstring& commandLine, std::optional<std::filesystem::path> outputPath, ElevationType elevationType)
@@ -231,6 +269,19 @@ WSLCExecutionResult RunWslcAndRedirectToFile(const std::wstring& commandLine, st
     return {.CommandLine = std::move(effectiveCommandLine), .Stdout = L"", .Stderr = stdErrOutput, .ExitCode = exitCode};
 }
 
+WSLCExecutionResult RunWslcWithStdinFile(const std::wstring& commandLine, const std::filesystem::path& stdinFilePath, ElevationType elevationType)
+{
+    SECURITY_ATTRIBUTES securityAttributes{};
+    securityAttributes.nLength = sizeof(securityAttributes);
+    securityAttributes.bInheritHandle = TRUE;
+
+    wil::unique_hfile stdinFile(CreateFileW(
+        stdinFilePath.c_str(), GENERIC_READ, FILE_SHARE_READ, &securityAttributes, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    THROW_LAST_ERROR_IF(!stdinFile);
+
+    return RunWslc(commandLine, elevationType, stdinFile.get());
+}
+
 void WaitForContainerOutput(const std::wstring& containerName, std::string_view expected, std::chrono::milliseconds timeout)
 {
     auto cmd = std::format(L"\"{}\" container logs -f {}", GetWslcPath(), containerName);
@@ -252,20 +303,15 @@ void WaitForContainerOutput(const std::wstring& containerName, std::string_view 
     WaitForOutput(wil::unique_handle{parentStdoutRead.release()}, expected, timeout);
 }
 
-std::wstring GetWslcHeader()
-{
-    std::wstringstream header;
-    header << L"Copyright (c) Microsoft Corporation. All rights reserved.\r\n"
-           << L"For privacy information about this product please visit https://aka.ms/privacy.\r\n"
-           << L"\r\n";
-    return header.str();
-}
-
-WSLCInteractiveSession RunWslcInteractive(const std::wstring& commandLine, ElevationType elevationType, std::optional<PseudoConsole> pseudoConsole)
+WSLCInteractiveSession RunWslcInteractive(const std::wstring& commandLine, ElevationType elevationType, std::optional<PseudoConsole> pseudoConsole, ProcessGroup processGroup)
 {
     auto cmd = L"\"" + GetWslcPath() + L"\" " + commandLine;
 
     wsl::windows::common::SubProcess process(nullptr, cmd.c_str());
+    if (processGroup == ProcessGroup::Create)
+    {
+        process.SetFlags(CREATE_NEW_PROCESS_GROUP);
+    }
 
     wil::unique_hfile parentStdinWrite;
     wil::unique_hfile parentStdoutRead;
@@ -316,7 +362,8 @@ WSLCInteractiveSession RunWslcInteractive(const std::wstring& commandLine, Eleva
         std::move(parentStderrRead),
         std::move(processHandle),
         std::move(nonElevatedToken), // Transfer token ownership to the session
-        std::move(console));
+        std::move(console),
+        processGroup);
 }
 
 PseudoConsole::PseudoConsole(SHORT columns, SHORT rows)
@@ -342,14 +389,16 @@ WSLCInteractiveSession::WSLCInteractiveSession(
     wil::unique_hfile stderrRead,
     wil::unique_handle processHandle,
     wil::unique_handle nonElevatedToken,
-    wsl::windows::common::helpers::unique_pseudo_console pseudoConsole) :
+    wsl::windows::common::helpers::unique_pseudo_console pseudoConsole,
+    ProcessGroup processGroup) :
     CommandLine(std::move(commandLine)),
     m_stdinWrite(std::move(stdinWrite)),
     m_stdoutRead(std::move(stdoutRead)),
     m_stderrRead(std::move(stderrRead)),
     m_pseudoConsole(std::move(pseudoConsole)),
     m_processHandle(std::move(processHandle)),
-    m_nonElevatedToken(std::move(nonElevatedToken))
+    m_nonElevatedToken(std::move(nonElevatedToken)),
+    m_processGroup(processGroup)
 {
     m_stdoutReader = std::make_unique<PartialHandleRead>(m_stdoutRead.get());
 
@@ -477,6 +526,12 @@ bool WSLCInteractiveSession::IsRunning() const
 void WSLCInteractiveSession::CloseStdin()
 {
     m_stdinWrite.reset();
+}
+
+void WSLCInteractiveSession::SendCtrlBreak()
+{
+    VERIFY_IS_TRUE(m_processGroup == ProcessGroup::Create);
+    THROW_IF_WIN32_BOOL_FALSE(GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetProcessId(m_processHandle.get())));
 }
 
 std::optional<int> WSLCInteractiveSession::GetExitCode() const

@@ -2,6 +2,7 @@ add_idl_winrt(wslcsdkwinrtidl "wslcsdk.idl")
 set_target_properties(wslcsdkwinrtidl PROPERTIES FOLDER windows)
 
 set(SOURCES
+    AuthenticateResult.cpp
     Container.cpp
     ContainerNamedVolume.cpp
     ContainerPortMapping.cpp
@@ -9,6 +10,7 @@ set(SOURCES
     ContainerVolume.cpp
     ImageInfo.cpp
     ImageProgress.cpp
+    InstallOptions.cpp
     InstallProgress.cpp
     Process.cpp
     ProcessCrashInformation.cpp
@@ -25,6 +27,7 @@ set(SOURCES
 )
 
 set(HEADERS
+    AuthenticateResult.h
     Container.h
     ContainerNamedVolume.h
     ContainerPortMapping.h
@@ -33,6 +36,7 @@ set(HEADERS
     Helpers.h
     ImageInfo.h
     ImageProgress.h
+    InstallOptions.h
     InstallProgress.h
     Process.h
     ProcessCrashInformation.h
@@ -53,10 +57,13 @@ add_dependencies(wslcsdkwinrt wslcsdkwinrtidl)
 
 set(MODULE_G_CPP ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_PLATFORM}/${CMAKE_BUILD_TYPE}/module.g.cpp)
 target_sources(wslcsdkwinrt PRIVATE ${MODULE_G_CPP})
+# The generated module mixes classic COM and C++/WinRT headers, so sharing a
+# translation unit with a projection source makes IUnknown ambiguous.
 set_source_files_properties(
     ${MODULE_G_CPP}
     PROPERTIES
-    GENERATED TRUE)
+    GENERATED TRUE
+    SKIP_UNITY_BUILD_INCLUSION ON)
 
 target_precompile_headers(wslcsdkwinrt PRIVATE precomp.h)
 target_include_directories(wslcsdkwinrt PRIVATE

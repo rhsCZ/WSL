@@ -14,6 +14,7 @@ Abstract:
 
 #include "ContainerCommand.h"
 #include "CLIExecutionContext.h"
+#include "CommonTasks.h"
 #include "ContainerTasks.h"
 #include "SessionTasks.h"
 #include "Task.h"
@@ -29,12 +30,13 @@ std::vector<Argument> ContainerListCommand::GetArguments() const
 {
     return {
         Argument::Create(ArgType::All),
-        Argument::Create(ArgType::Filter, false, NO_LIMIT),
+        Argument::Create(ArgType::Filter, {.Limit = Limit::Unlimited}),
         Argument::Create(ArgType::Format),
         Argument::Create(ArgType::Last),
         Argument::Create(ArgType::Latest),
         Argument::Create(ArgType::NoTrunc),
         Argument::Create(ArgType::Quiet),
+        Argument::Create(ArgType::Size),
     };
 }
 
@@ -54,15 +56,18 @@ void ContainerListCommand::ExecuteInternal(CLIExecutionContext& context) const
     context
         << ResolveSession
         << GetContainers
-        << ListContainers;
+        << FormatContainerOutput //
+        << PrintFormattedOutput;
 }
 // clang-format on
 
-void ContainerListCommand::ValidateArgumentsInternal(const ArgMap& execArgs) const
+void ContainerListCommand::ValidateArgumentsInternal(ArgMap& execArgs) const
 {
-    if (execArgs.Contains(ArgType::Last) && execArgs.Contains(ArgType::Latest))
+    if (execArgs.Contains(ArgType::Last) && execArgs.GetValue<ArgType::Latest>())
     {
-        throw CommandException(Localization::WSLCCLI_MultipleExclusiveArgumentsProvided(L"--last, --latest"));
+        throw ArgumentException(
+            Localization::WSLCCLI_MultipleExclusiveArgumentsProvided(L"--last, --latest"),
+            GetArgumentsForHelp({ArgType::Last, ArgType::Latest}));
     }
 }
 } // namespace wsl::windows::wslc

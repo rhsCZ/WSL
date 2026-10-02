@@ -12,12 +12,13 @@ Abstract:
 
 --*/
 #include "Argument.h"
-#include "ArgumentValidation.h"
+#include "ArgumentConvertedTypes.h"
 #include "CLIExecutionContext.h"
+#include "CommonTasks.h"
 #include "VolumeModel.h"
 #include "VolumeService.h"
 #include "VolumeTasks.h"
-#include "TableOutput.h"
+#include "TableData.h"
 #include <wslc_schema.h>
 
 using namespace wsl::shared;
@@ -27,10 +28,49 @@ using namespace wsl::windows::common::wslutil;
 using namespace wsl::windows::wslc::execution;
 using namespace wsl::windows::wslc::models;
 using namespace wsl::windows::wslc::services;
+using wsl::windows::common::string::FormatHumanReadableSize;
 
 namespace wsl::windows::wslc::task {
 
-static bool TryInspectVolume(Session& session, const std::string& volumeName, std::optional<wslc_schema::InspectVolume>& inspectData)
+using namespace wsl::windows::wslc::cli;
+using namespace wsl::windows::cli::table;
+
+namespace {
+
+    // Reported for the fields that only carry a value when volume usage data or swarm cluster
+    // information is available, neither of which applies here.
+    constexpr std::string_view c_volumeNotAvailable = "N/A";
+
+    // Converts session volume entries into the all-string shape used for "volume list --format json".
+    VolumeOutputInformation ToVolumeOutput(const wslc_schema::VolumeListEntry& volume)
+    {
+        VolumeOutputInformation entry;
+        entry.Availability = c_volumeNotAvailable;
+        entry.Driver = volume.Driver;
+        entry.Group = c_volumeNotAvailable;
+        entry.Links = c_volumeNotAvailable;
+        entry.Mountpoint = volume.Mountpoint;
+        entry.Name = volume.Name;
+        entry.Scope = volume.Scope;
+        entry.Size = c_volumeNotAvailable;
+        entry.Status = c_volumeNotAvailable;
+
+        for (const auto& [key, value] : volume.Labels)
+        {
+            if (!entry.Labels.empty())
+            {
+                entry.Labels += ",";
+            }
+
+            entry.Labels += std::format("{}={}", key, value);
+        }
+
+        return entry;
+    }
+
+} // namespace
+
+static bool TryInspectVolume(Terminal& terminal, Session& session, const std::string& volumeName, std::optional<wslc_schema::InspectVolume>& inspectData)
 {
     try
     {
@@ -41,7 +81,7 @@ static bool TryInspectVolume(Session& session, const std::string& volumeName, st
     {
         if (ex.GetErrorCode() == WSLC_E_VOLUME_NOT_FOUND)
         {
-            PrintMessage(Localization::MessageWslcVolumeNotFound(volumeName.c_str()), stderr);
+            terminal.Error(L"{}\n", Localization::MessageWslcVolumeNotFound(volumeName.c_str()));
             return false;
         }
 
@@ -49,7 +89,7 @@ static bool TryInspectVolume(Session& session, const std::string& volumeName, st
     }
 }
 
-static bool TryDeleteVolume(Session& session, const std::string& volumeName, bool force)
+static bool TryDeleteVolume(Terminal& terminal, Session& session, const std::string& volumeName, bool force)
 {
     try
     {
@@ -62,7 +102,7 @@ static bool TryDeleteVolume(Session& session, const std::string& volumeName, boo
         {
             if (!force)
             {
-                PrintMessage(Localization::MessageWslcVolumeNotFound(volumeName.c_str()), stderr);
+                terminal.Error(L"{}\n", Localization::MessageWslcVolumeNotFound(volumeName.c_str()));
             }
 
             return false;
@@ -79,41 +119,39 @@ void CreateVolume(CLIExecutionContext& context)
     models::CreateVolumeOptions options{};
     if (context.Args.Contains(ArgType::VolumeName))
     {
-        options.Name = WideToMultiByte(context.Args.Get<ArgType::VolumeName>());
+        options.Name = WideToMultiByte(context.Args.GetValue<ArgType::VolumeName>());
     }
 
-    for (const auto& option : context.Args.GetAll<ArgType::Options>())
+    for (const auto& option : context.Args.GetAllValues<ArgType::Options>())
     {
-        auto parsed = validation::ParseDriverOption(option);
-        options.DriverOpts.emplace_back(parsed.first, parsed.second);
+        options.DriverOpts.push_back(option);
     }
 
-    for (const auto& label : context.Args.GetAll<ArgType::Label>())
+    for (const auto& label : context.Args.GetAllValues<ArgType::Label>())
     {
-        auto parsed = validation::ParseLabel(label);
-        options.Labels.emplace_back(parsed.first, parsed.second);
+        options.Labels.push_back(label);
     }
 
     if (context.Args.Contains(ArgType::Driver))
     {
-        options.Driver = WideToMultiByte(context.Args.Get<ArgType::Driver>());
+        options.Driver = WideToMultiByte(context.Args.GetValue<ArgType::Driver>());
     }
 
     auto result = VolumeService::Create(context.Data.Get<Data::Session>(), options);
-    PrintMessage(MultiByteToWide(result.Name));
+    context.Terminal.Output(L"{}\n", MultiByteToWide(result.Name));
 }
 
 void DeleteVolumes(CLIExecutionContext& context)
 {
     WI_ASSERT(context.Data.Contains(Data::Session));
     auto& session = context.Data.Get<Data::Session>();
-    auto volumeNames = context.Args.GetAll<ArgType::VolumeName>();
-    const bool force = context.Args.Contains(ArgType::Force);
+    auto volumeNames = context.Args.GetAllValues<ArgType::VolumeName>();
+    const bool force = context.Args.GetValue<ArgType::Force>();
     for (const auto& name : volumeNames)
     {
-        if (TryDeleteVolume(session, WideToMultiByte(name), force))
+        if (TryDeleteVolume(context.Terminal, session, WideToMultiByte(name), force))
         {
-            PrintMessage(name);
+            context.Terminal.Output(L"{}\n", name);
         }
         else if (!force)
         {
@@ -126,19 +164,20 @@ void GetVolumes(CLIExecutionContext& context)
 {
     WI_ASSERT(context.Data.Contains(Data::Session));
     auto& session = context.Data.Get<Data::Session>();
-    context.Data.Add<Data::Volumes>(VolumeService::List(session));
+    auto filters = context.Args.GetAllValues<ArgType::Filter>();
+    context.Data.Add<Data::Volumes>(VolumeService::List(session, filters));
 }
 
 void InspectVolumes(CLIExecutionContext& context)
 {
     WI_ASSERT(context.Data.Contains(Data::Session));
     auto& session = context.Data.Get<Data::Session>();
-    auto volumeNames = context.Args.GetAll<ArgType::VolumeName>();
+    auto volumeNames = context.Args.GetAllValues<ArgType::VolumeName>();
     std::vector<wsl::windows::common::wslc_schema::InspectVolume> result;
     for (const auto& name : volumeNames)
     {
         std::optional<wslc_schema::InspectVolume> inspectData;
-        if (TryInspectVolume(session, WideToMultiByte(name), inspectData))
+        if (TryInspectVolume(context.Terminal, session, WideToMultiByte(name), inspectData))
         {
             result.push_back(*inspectData);
         }
@@ -148,51 +187,60 @@ void InspectVolumes(CLIExecutionContext& context)
         }
     }
 
-    auto json = ToJson(result, c_jsonPrettyPrintIndent);
-    PrintMessage(MultiByteToWide(json));
+    auto json = ToJson(result, context.Args.GetValue<ArgType::InspectFormat>(c_jsonPrettyPrintIndent));
+    context.Terminal.Output(L"{}\n", MultiByteToWide(json));
 }
 
-void ListVolumes(CLIExecutionContext& context)
+void FormatVolumeOutput(CLIExecutionContext& context)
 {
     WI_ASSERT(context.Data.Contains(Data::Volumes));
     auto& volumes = context.Data.Get<Data::Volumes>();
+    const auto format = context.Args.GetValue<ArgType::Format>(FormatType::Table);
 
-    if (context.Args.Contains(ArgType::Quiet))
+    if (context.Args.GetValue<ArgType::Quiet>())
     {
+        TableData table{Localization::WSLCCLI_TableHeaderVolumeName()};
+        table.ShowHeader = false;
+        table.Reserve(volumes.size());
+
         for (const auto& volume : volumes)
         {
-            PrintMessage(MultiByteToWide(volume.Name));
+            table.AddRow({MultiByteToWide(volume.Name)});
         }
 
+        context.Data.Add<Data::Table>(std::move(table));
         return;
-    }
-
-    FormatType format = FormatType::Table;
-    if (context.Args.Contains(ArgType::Format))
-    {
-        format = validation::GetFormatTypeFromString(context.Args.Get<ArgType::Format>());
     }
 
     switch (format)
     {
     case FormatType::Json:
     {
-        auto json = ToJson(volumes, c_jsonPrettyPrintIndent);
-        PrintMessage(MultiByteToWide(json));
+        std::vector<std::wstring> json;
+        json.reserve(volumes.size());
+
+        for (const auto& volume : volumes)
+        {
+            json.push_back(ToJsonW(ToVolumeOutput(volume), c_jsonCompactIndent));
+        }
+
+        context.Data.Add<Data::Json>(std::move(json));
         break;
     }
     case FormatType::Table:
     {
-        auto table = wsl::windows::wslc::TableOutput<2>({L"DRIVER", L"VOLUME NAME"});
+        TableData table{Localization::WSLCCLI_TableHeaderDriver(), Localization::WSLCCLI_TableHeaderVolumeName()};
+        table.Reserve(volumes.size());
+
         for (const auto& volume : volumes)
         {
-            table.OutputLine({
+            table.AddRow({
                 MultiByteToWide(volume.Driver),
                 MultiByteToWide(volume.Name),
             });
         }
 
-        table.Complete();
+        context.Data.Add<Data::Table>(std::move(table));
         break;
     }
     default:
@@ -202,25 +250,33 @@ void ListVolumes(CLIExecutionContext& context)
 
 void PruneVolumes(CLIExecutionContext& context)
 {
+    context.Data.Add<Data::ConfirmWarning>(
+        context.Args.GetValue<ArgType::All>() ? Localization::WSLCCLI_VolumePruneAllConfirm() : Localization::WSLCCLI_VolumePruneConfirm());
+    context.Data.Add<Data::ConfirmMessage>(Localization::WSLCCLI_PruneConfirmPrompt());
+    ConfirmAction(context);
+
     WI_ASSERT(context.Data.Contains(Data::Session));
     auto& session = context.Data.Get<Data::Session>();
 
-    const bool all = context.Args.Contains(ArgType::All);
+    const bool all = context.Args.GetValue<ArgType::All>();
 
-    std::vector<std::pair<std::string, std::string>> filters;
-    for (const auto& value : context.Args.GetAll<ArgType::Filter>())
+    // Filter values are parsed and cached during argument validation.
+    auto filters = context.Args.GetAllValues<ArgType::Filter>();
+
+    auto result = VolumeService::Prune(context.Terminal, session, all, filters);
+
+    if (!result.PrunedVolumes.empty())
     {
-        filters.push_back(validation::ParseFilter(value));
+        context.Terminal.Output(L"{}\n", Localization::WSLCCLI_VolumePruneDeletedHeader());
+        for (const auto& volumeName : result.PrunedVolumes)
+        {
+            context.Terminal.Output(L"{}\n", MultiByteToWide(volumeName));
+        }
+
+        context.Terminal.Output(L"\n");
     }
 
-    auto result = VolumeService::Prune(session, all, filters);
-
-    for (const auto& volumeName : result.PrunedVolumes)
-    {
-        PrintMessage(Localization::WSLCCLI_VolumePruneDeleted(MultiByteToWide(volumeName)));
-    }
-
-    PrintMessage(L"");
-    PrintMessage(Localization::WSLCCLI_VolumePruneSpaceReclaimed(wsl::shared::string::FormatBytes(result.SpaceReclaimed)));
+    context.Terminal.Output(
+        L"{}\n", Localization::WSLCCLI_VolumePruneSpaceReclaimed(FormatHumanReadableSize(result.SpaceReclaimed, c_reclaimedSpacePrecision)));
 }
 } // namespace wsl::windows::wslc::task
