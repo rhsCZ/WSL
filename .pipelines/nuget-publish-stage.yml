@@ -44,8 +44,6 @@ stages:
               itemPattern: nuget/*.nupkg
 
         steps:
-          - checkout: none
-
           - ${{ each package in parameters.packages }}:
               - task: NuGetCommand@2
                 displayName: Push ${{ package }}

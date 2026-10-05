@@ -70,8 +70,6 @@ jobs:
           itemPattern: bundle/*.cab
 
     steps:
-      - checkout: none
-
       - ${{ if eq(parameters.updateRunName, true) }}:
           - pwsh: |
               # Surface the version being published as the run name. The version is extracted from the CAB file name.

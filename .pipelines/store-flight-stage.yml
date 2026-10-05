@@ -46,8 +46,6 @@ stages:
               itemPattern: StoreBrokerPayload/*
 
         steps:
-          - checkout: none
-
           - task: MS-RDX-MRO.windows-store-publish.flight-task.store-flight@3
             displayName: 'Flight StoreBroker Package to Partner Center - WSL SelfHost Flight Group'
             condition: and(succeeded(), eq('${{ parameters.publishPackage }}', true), eq('${{ parameters.pushToStore }}', true))
